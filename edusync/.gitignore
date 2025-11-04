@@ -9,6 +9,9 @@ target/
 # DO NOT commit this file to Git!
 .env
 
+/node_modules
+
+
 # Other common Java/Maven ignores
 target/
 .mvn/

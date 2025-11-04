@@ -23,8 +23,13 @@ app:
   jwt:
     # This is your security config
     secret-key: ${JWT_SECRET_KEY}
+    expirationTime: ${JWT_EXPIRATION_TIME}
+
 
 ---
+
+api:
+  url: ${BASE_URL}${API_VERSION}
 
 # ===================================================================
 # DEVELOPMENT PROFILE (Active when 'spring.profiles.active=dev')
@@ -38,10 +43,10 @@ spring:
   datasource:
     driver-class-name: org.postgresql.Driver
 
-    # These 3 lines are being read from .env file
-    url: ${AIVEN_DB_URL}
-    username: ${AIVEN_DB_USER}
-    password: ${AIVEN_DB_PASS}
+    # Configuration credentials are being read from .env file
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASS}
 
     # We will keep the timeout fix
     type: com.zaxxer.hikari.HikariDataSource
