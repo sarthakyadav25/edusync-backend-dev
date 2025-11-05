@@ -2,6 +2,7 @@ package com.project.edusync.uis.model.entity;
 
 import com.project.edusync.common.model.AuditableEntity;
 import com.project.edusync.iam.model.entity.User;
+import com.project.edusync.uis.model.enums.Gender;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -36,6 +37,10 @@ public class UserProfile extends AuditableEntity {
 
     @Column(columnDefinition = "TEXT")
     private String bio;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "gender")
+    private Gender gender;
 
     // --- Relationships ---
 

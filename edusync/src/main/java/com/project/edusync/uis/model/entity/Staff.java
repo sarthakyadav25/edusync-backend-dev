@@ -1,5 +1,7 @@
 package com.project.edusync.uis.model.entity;
 
+import com.project.edusync.common.model.AuditableEntity;
+import com.project.edusync.uis.model.enums.Department;
 import com.project.edusync.uis.model.enums.StaffType;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -13,13 +15,19 @@ import java.time.LocalDate;
 @Getter
 @Setter
 @NoArgsConstructor
-public class Staff extends com.project.edusync.common.model.AuditableEntity {
+public class Staff extends AuditableEntity {
 
     // id, uuid, and audit fields are inherited.
     // 'id' here is the staff_id.
 
     @Column(name = "job_title", length = 100, nullable = false)
     private String jobTitle; // e.g., "History Teacher", "Librarian"
+
+    @Column(name="employee_id", length = 10, nullable = false)
+    private String employeeId;
+
+    @Enumerated(EnumType.STRING)
+    private Department department;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "staff_type", length = 50, nullable = false)
