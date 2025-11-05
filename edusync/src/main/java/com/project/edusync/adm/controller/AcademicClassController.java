@@ -67,4 +67,10 @@ public class AcademicClassController {
         AcademicClassResponseDto response = academicClassService.updateClass(classId,academicClassRequestDto);
         return new ResponseEntity<>(response,HttpStatus.OK);
     }
+
+    @DeleteMapping("/classes/{classId}")
+    public ResponseEntity<void> deleteClassById(@PathVariable UUID classId){
+        academicClassService.deleteClass(classId);
+        return ResponseEntity.noContent().build();
+    }
 }
