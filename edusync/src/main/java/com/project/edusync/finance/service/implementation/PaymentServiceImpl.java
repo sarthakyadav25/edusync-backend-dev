@@ -31,7 +31,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final InvoiceRepository invoiceRepository;
     private final StudentRepository studentRepository;
     private final PaymentMapper paymentMapper;
-    private final ModelMapper modelMapper;
+    private final ModelMapper modelMapper; // We keep it for other future methods
 
     @Override
     @Transactional
@@ -39,10 +39,10 @@ public class PaymentServiceImpl implements PaymentService {
 
         // 1. Find the related entities
         Invoice invoice = invoiceRepository.findById(createDTO.getInvoiceId())
-                .orElseThrow(() -> new InvoiceNotFoundException("Invoice not found with Id: " + createDTO.getInvoiceId()));
+                .orElseThrow(() -> new InvoiceNotFoundException("Invoice not found with invoice ID: " + createDTO.getInvoiceId()));
 
         Student student = studentRepository.findById(createDTO.getStudentId())
-                .orElseThrow(() -> new StudentNotFoundException("Invoice not found with Id: " + createDTO.getStudentId()));
+                .orElseThrow(() -> new StudentNotFoundException("Student not found with student ID: " + createDTO.getStudentId()));
 
         // 2. Perform Validation
         if (!invoice.getStudent().getId().equals(student.getId())) {
@@ -52,28 +52,36 @@ public class PaymentServiceImpl implements PaymentService {
             throw new InvalidPaymentOperationException("Invoice is already " + invoice.getStatus());
         }
 
-        // 3. Create the new Payment entity
-        Payment payment = modelMapper.map(createDTO, Payment.class);
+        // --- FIX: Reverted to manual mapping for entity creation ---
+        // 3. Create the new Payment entity manually
+        Payment payment = new Payment();
         payment.setStudent(student);
         payment.setInvoice(invoice);
+        payment.setAmountPaid(createDTO.getAmountPaid());
+        payment.setPaymentMethod(createDTO.getPaymentMethod());
+        payment.setTransactionId(createDTO.getTransactionId());
+        payment.setNotes(createDTO.getNotes());
         payment.setStatus(PaymentStatus.SUCCESS); // Offline is considered an immediate success
 
         // Use provided payment date or set to now
         if (createDTO.getPaymentDate() == null) {
             payment.setPaymentDate(LocalDateTime.now());
+        } else {
+            payment.setPaymentDate(createDTO.getPaymentDate());
         }
+        // --- END OF FIX ---
 
         // 4. Update the Invoice
         BigDecimal newPaidAmount = invoice.getPaidAmount().add(createDTO.getAmountPaid());
         invoice.setPaidAmount(newPaidAmount);
 
         // Check if this payment makes the invoice fully paid
+        // We use compareTo: 0 (equal), 1 (newPaidAmount is greater)
         if (newPaidAmount.compareTo(invoice.getTotalAmount()) >= 0) {
             invoice.setStatus(InvoiceStatus.PAID);
         } else {
             // If it's a partial payment, just mark it as pending (or a new "PARTIAL" status)
-            // For now, we keep it PENDING until fully paid.
-            invoice.setStatus(InvoiceStatus.PENDING); // Or OVERDUE if dueDate is past
+            invoice.setStatus(InvoiceStatus.PENDING);
         }
 
         // 5. Save both entities in the transaction

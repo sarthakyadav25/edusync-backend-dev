@@ -10,7 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("${api.url}//auth/finance/payments") // Base path: /api/v1/finance/payments
+@RequestMapping("${api.url}/auth/finance/payments") // Base path: /api/v1/finance/payments
 @RequiredArgsConstructor
 public class PaymentController {
 

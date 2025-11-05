@@ -12,26 +12,34 @@
             padding: 0;
         }
         .container {
-            width: 700px;
+            width: 600px;
             margin: 20px auto;
             border: 1px solid #ccc;
             padding: 20px;
         }
+
+        /* --- Header: Logo + School Info --- */
         .header {
-            text-align: center;
+            display: table;
+            width: 100%;
             border-bottom: 2px solid #000;
             padding-bottom: 10px;
             margin-bottom: 10px;
-            overflow: auto; /* To clear float */
         }
-        .header img {
-            float: left;
+        .header-logo {
+            display: table-cell;
+            vertical-align: top;
+            width: 90px;
+        }
+        .header-logo img {
             height: 80px;
+            width: 80px;
         }
         .school-info {
-            float: left;
-            margin-left: 20px;
+            display: table-cell;
+            vertical-align: top;
             text-align: left;
+            padding-left: 20px;
         }
         .school-info h1 {
             margin: 0;
@@ -42,6 +50,7 @@
             margin: 5px 0 0;
             font-size: 10pt;
         }
+
         .receipt-title {
             text-align: center;
             font-size: 14pt;
@@ -51,17 +60,20 @@
             padding: 5px;
             margin: 15px 0;
         }
+
+        /* --- Info Grid: Student Details --- */
         .info-grid {
-            overflow: auto;
+            display: table;
+            width: 100%;
             margin-bottom: 15px;
         }
         .info-col {
-            float: left;
-            width: 48%;
+            display: table-cell;
+            width: 50%;
+            vertical-align: top;
         }
         .info-table {
             width: 100%;
-            border-collapse: collapse;
         }
         .info-table td {
             padding: 4px 2px;
@@ -74,6 +86,7 @@
             width: 10px;
         }
 
+        /* --- Line Items Table --- */
         table.line-items {
             width: 100%;
             border-collapse: collapse;
@@ -104,15 +117,18 @@
             padding: 5px;
             margin: 15px 0;
         }
+
+        /* --- Pay Mode Grid --- */
         .pay-grid {
-            overflow: auto;
-            margin-bottom: 15px;
+            display: table;
+            width: 100%;
             border-bottom: 1px solid #ccc;
             padding-bottom: 10px;
         }
         .pay-col {
-            float: left;
-            width: 48%;
+            display: table-cell;
+            width: 50%;
+            vertical-align: top;
         }
         .pay-table {
             width: 100%;
@@ -124,17 +140,23 @@
             font-weight: bold;
             width: 80px;
         }
+
+        /* --- Totals --- */
         .total-summary {
-            overflow: auto; /* clear floats */
+            display: table;
+            width: 100%;
             font-weight: bold;
             font-size: 11pt;
             padding: 10px 5px;
         }
         .total-label {
-            float: left;
+            display: table-cell;
+            width: 80%;
+            text-align: right;
         }
         .total-value {
-            float: right;
+            display: table-cell;
+            text-align: right;
         }
         .total-in-words {
             font-weight: bold;
@@ -143,13 +165,16 @@
             border-bottom: 1px solid #ccc;
             margin-top: 10px;
         }
+
+        /* --- Footer --- */
         .footer {
-            overflow: auto; /* clear floats */
+            display: table;
+            width: 100%;
             margin-top: 20px;
             font-size: 9pt;
         }
         .footer-qr {
-            float: left;
+            display: table-cell;
             width: 100px;
         }
         .footer-qr img {
@@ -157,13 +182,14 @@
             height: 100px;
         }
         .footer-text {
-            float: left;
-            margin-left: 20px;
+            display: table-cell;
+            vertical-align: top;
+            padding-left: 20px;
         }
         .footer-signature {
-            float: right;
-            text-align: center;
-            margin-top: 40px;
+            display: table-cell;
+            vertical-align: bottom;
+            text-align: right;
             font-style: italic;
         }
     </style>
@@ -172,7 +198,9 @@
 <div class="container">
 
     <div class="header">
-        <img th:src="${schoolLogoBase64}" alt="School Logo" />
+        <div class="header-logo">
+            <img th:src="${schoolLogoBase64}" alt="Logo" />
+        </div>
         <div class="school-info">
             <h1>Delhi Public School</h1>
             <p>Site No.1, Sector-45, Urban Estate, Gurgaon, Haryana</p>
@@ -182,7 +210,7 @@
     <div class="receipt-title">FEE RECEIPT</div>
 
     <div class="info-grid">
-        <div class="info-col" style="margin-right: 4%;">
+        <div class="info-col">
             <table class="info-table">
                 <tr>
                     <td>Receipt No</td>
@@ -256,7 +284,7 @@
     <div class="pay-mode-title">PAY MODE INFORMATION</div>
 
     <div class="pay-grid">
-        <div class="pay-col" style="margin-right: 4%;">
+        <div class="pay-col">
             <table class="pay-table">
                 <tr>
                     <td>Pay Mode</td>
