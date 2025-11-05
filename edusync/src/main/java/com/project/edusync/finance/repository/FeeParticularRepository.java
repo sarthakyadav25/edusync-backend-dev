@@ -28,5 +28,5 @@ public interface FeeParticularRepository extends JpaRepository<FeeParticular, Lo
      * @param structureId The ID of the parent FeeStructure.
      * @return A list of fee particulars.
      */
-    List<FeeParticular> findByFeeStructure_StructureId(Integer structureId);
+    List<FeeParticular> findByFeeStructure_Id(Long structureId);
 }

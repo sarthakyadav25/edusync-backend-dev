@@ -27,9 +27,9 @@ public interface StudentFeeMapRepository extends JpaRepository<StudentFeeMap, Lo
      * Finds a student's fee mapping by their student ID.
      * This assumes a student is typically mapped to only one active structure.
      *
-     * @param studentId The ID of the student.
+     * @param id The ID of the student.
      * @return An Optional containing the mapping if found.
      */
-    Optional<StudentFeeMap> findByStudent_StudentId(Integer studentId);
+    Optional<StudentFeeMap> findByStudent_Id(Long id);
     // Note: If your Student's PK is 'id' (a Long), this should be findByStudent_Id(Long studentId)
 }

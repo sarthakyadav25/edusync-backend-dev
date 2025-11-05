@@ -13,5 +13,5 @@ import org.springframework.stereotype.Repository;
 public interface InvoiceLineItemRepository extends JpaRepository<InvoiceLineItem, Long> {
 
     // Custom queries are rare here, but you could add:
-    // List<InvoiceLineItem> findByInvoice_InvoiceId(Integer invoiceId);
+    // List<InvoiceLineItem> findByInvoice_InvoiceId(Long invoiceId);
 }

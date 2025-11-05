@@ -1,5 +1,6 @@
 package com.project.edusync.uis.model.entity;
 
+import com.project.edusync.adm.model.entity.Section;
 import com.project.edusync.common.model.AuditableEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -20,13 +21,15 @@ public class Student extends AuditableEntity {
     // id, uuid, and audit fields are inherited.
     // 'id' here is the student_id.
 
-    // All name/dob columns are REMOVED.
 
     @Column(name = "enrollment_number", length = 50, unique = true)
     private String enrollmentNumber;
 
     @Column(name = "enrollment_date")
     private LocalDate enrollmentDate;
+
+    @Column(name = "roll_no")
+    private LocalDate rollNo;
 
     // This is the "Soft Delete" flag.
     @Column(name = "is_active", nullable = false)
@@ -49,4 +52,13 @@ public class Student extends AuditableEntity {
      */
     @OneToMany(mappedBy = "student", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<StudentGuardianRelationship> guardianRelationships = new HashSet<>();
+
+    /**
+     * The section this student is currently enrolled in.
+     * This is the "Many-to-One" side and owns the relationship.
+     * The 'students' table will have a 'section_id' foreign key.
+     */
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "section_id", nullable = false)
+    private Section section;
 }

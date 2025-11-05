@@ -1,6 +1,7 @@
 package com.project.edusync.adm.model.entity;
 
 import com.project.edusync.common.model.AuditableEntity;
+import com.project.edusync.uis.model.entity.Student;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -19,8 +20,8 @@ import java.util.Set;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@EqualsAndHashCode(callSuper = true, exclude = {"academicClass", "schedules", "constraints"}) // Exclude relationships
-@ToString(callSuper = true, exclude = {"academicClass", "schedules", "constraints"}) // Exclude lazy relationships
+@EqualsAndHashCode(callSuper = true, exclude = {"academicClass", "schedules", "constraints", "students"}) // Exclude relationships
+@ToString(callSuper = true, exclude = {"academicClass", "schedules", "constraints", "students"}) // Exclude lazy relationships
 @Entity
 @Table(name = "sections")
 public class Section extends AuditableEntity {
@@ -50,5 +51,12 @@ public class Section extends AuditableEntity {
      */
     @OneToMany(mappedBy = "section", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     private Set<AcademicConstraint> academicConstraints = new HashSet<>();
+
+    /**
+     * All students enrolled in this specific section.
+     * This is the "One-to-Many" (inverse) side of the relationship.
+     */
+    @OneToMany(mappedBy = "section", fetch = FetchType.LAZY)
+    private Set<Student> students = new HashSet<>();
 
 }
