@@ -16,6 +16,7 @@ public interface AcademicClassService {
 
     AcademicClassResponseDto getClassById(UUID classId);
 
-
     AcademicClassResponseDto updateClass(UUID classId, AcademicClassRequestDto academicClassRequestDto);
+
+    void deleteClass(UUID classId);
 }

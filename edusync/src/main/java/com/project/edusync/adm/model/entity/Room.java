@@ -33,6 +33,9 @@ public class Room extends AuditableEntity {
     @Column(name = "room_type", length = 100)
     private String roomType;
 
+    @Column(name = "is_active")
+    private Boolean isActive = true;
+
     // --- Relationships ---
 
     /**

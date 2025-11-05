@@ -31,6 +31,9 @@ public class AcademicClass extends AuditableEntity {
     @Column(name = "name", nullable = false, length = 100)
     private String name;
 
+    @Column(name = "is_active")
+    private Boolean isActive = true;
+
     // --- Relationships ---
 
     /**

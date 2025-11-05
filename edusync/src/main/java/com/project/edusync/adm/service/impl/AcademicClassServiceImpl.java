@@ -72,6 +72,18 @@ public class AcademicClassServiceImpl implements AcademicClassService {
         return toClassResponseDto(updatedClass); // Use private helper
     }
 
+    @Override
+    public void deleteClass(UUID classId){
+        log.info("Attempting to delete class with id: {}", classId);
+        if (!academicClassRepository.existsById(classId)) {
+            log.warn("Failed to delete. Class not found with id: {}", classId);
+            throw new RuntimeException("AcademicClass id: " + classId + " not found");
+        }
+        // Add logic here to check for child sections if cascade delete is not on
+        academicClassRepository.softDeleteById(classId);
+        log.info("Class with id {} deleted successfully", classId);
+    }
+
     private AcademicClassResponseDto toClassResponseDto(AcademicClass entity) {
         if (entity == null) return null;
         return AcademicClassResponseDto.builder()

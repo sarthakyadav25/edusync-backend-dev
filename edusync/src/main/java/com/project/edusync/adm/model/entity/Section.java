@@ -31,6 +31,9 @@ public class Section extends AuditableEntity {
     @Column(name = "section_name", nullable = false, length = 100)
     private String sectionName;
 
+    @Column(name = "is_active")
+    private Boolean isActive = true;
+
     // --- Relationships ---
 
     /**

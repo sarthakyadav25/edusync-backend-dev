@@ -11,4 +11,10 @@ public interface AcademicClassRepository extends JpaRepository<AcademicClass, Lo
 
     @Query("SELECT c from AcademicClass c WHERE c.uuid = :classId")
     Optional<AcademicClass> findById(UUID classId);
+
+    @Query("SELECT c from AcademicClass c Where c.uuid = :classId")
+    boolean existsById(UUID classId);
+
+    @Query("UPDATE AcademicClass c SET c.isActive = false WHERE c.uuid = :classId")
+    void softDeleteById(UUID classId);
 }
