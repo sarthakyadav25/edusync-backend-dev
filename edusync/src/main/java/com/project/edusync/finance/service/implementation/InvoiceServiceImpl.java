@@ -29,6 +29,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -181,6 +182,35 @@ public class InvoiceServiceImpl implements InvoiceService {
         // 7. Call the PDF service
         return pdfGenerationService.generatePdfFromHtml("receipt", data);
     }
+
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<InvoiceResponseDTO> getInvoicesForStudent(Long studentId) {
+        // 1. Find the student
+        Student student = studentRepository.findById(studentId)
+                .orElseThrow(() -> new StudentNotFoundException("Student not found with ID: " + studentId));
+
+        // 2. Find all invoices for that one student
+        return invoiceRepository.findByStudent(student).stream()
+                .map(invoiceMapper::toDto)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public InvoiceResponseDTO getInvoiceByIdForParent(Long invoiceId) {
+        // 1. Find the invoice by its ID
+        Invoice invoice = invoiceRepository.findById(invoiceId)
+                .orElseThrow(() -> new InvoiceNotFoundException("Invoice not found with ID: " + invoiceId));
+
+        // 2. SECURITY WARNING: We are skipping the check for parent ownership
+        // Todo:  add this later.
+
+        // 3. Map and return
+        return invoiceMapper.toDto(invoice);
+    }
+
 
     // --- Private Helper Methods ---
 
