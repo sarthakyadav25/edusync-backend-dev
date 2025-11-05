@@ -69,8 +69,17 @@ public class AcademicClassController {
     }
 
     @DeleteMapping("/classes/{classId}")
-    public ResponseEntity<void> deleteClassById(@PathVariable UUID classId){
+    public ResponseEntity<Void> deleteClassById(@PathVariable UUID classId){
         academicClassService.deleteClass(classId);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/classes/{classId}/sections")
+    public ResponseEntity<SectionResponseDto> createSectionForClass(
+            @PathVariable UUID classId,
+            @Valid @RequestBody SectionRequestDto requestDto) {
+
+        SectionResponseDto createdSection = academicClassService.addSectionToClass(classId, requestDto);
+        return new ResponseEntity<>(createdSection, HttpStatus.CREATED);
     }
 }
