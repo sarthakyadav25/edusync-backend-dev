@@ -1,4 +1,4 @@
-package com.project.edusync.finance.service.implementation;
+package com.project.edusync.finance.service.implementation; // Or your '...service' package
 
 import com.project.edusync.common.exception.finance.FeeStructureNotFoundException;
 import com.project.edusync.common.exception.finance.StudentFeeMapNotFoundException;
@@ -11,13 +11,13 @@ import com.project.edusync.finance.model.entity.FeeStructure;
 import com.project.edusync.finance.model.entity.StudentFeeMap;
 import com.project.edusync.finance.repository.FeeStructureRepository;
 import com.project.edusync.finance.repository.StudentFeeMapRepository;
-import com.project.edusync.finance.service.StudentFeeMapService;
+import com.project.edusync.finance.service.StudentFeeMapService; // Import interface
 import com.project.edusync.uis.model.entity.Student;
 import com.project.edusync.uis.repository.StudentRepository;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -35,12 +35,16 @@ public class StudentFeeMapServiceImpl implements StudentFeeMapService {
     @Override
     @Transactional
     public StudentFeeMapResponseDTO createStudentFeeMap(StudentFeeMapCreateDTO createDTO) {
+
         // 1. Find the related entities
         Student student = findStudentById(createDTO.getStudentId());
         FeeStructure feeStructure = findFeeStructureById(createDTO.getStructureId());
 
-        // 2. Use ModelMapper for simple fields
-        StudentFeeMap studentFeeMap = modelMapper.map(createDTO, StudentFeeMap.class);
+        // --- FIX: Reverted to manual mapping for entity creation ---
+        // 2. Create new entity manually
+        StudentFeeMap studentFeeMap = new StudentFeeMap();
+        studentFeeMap.setEffectiveDate(createDTO.getEffectiveDate());
+        studentFeeMap.setNotes(createDTO.getNotes());
 
         // 3. Manually set the complex relationships
         studentFeeMap.setStudent(student);
@@ -56,15 +60,13 @@ public class StudentFeeMapServiceImpl implements StudentFeeMapService {
     public StudentFeeMapResponseDTO updateStudentFeeMap(Long mapId, StudentFeeMapUpdateDTO updateDTO) {
         // 1. Find the existing map
         StudentFeeMap existingMap = studentFeeMapRepository.findById(mapId)
-                .orElseThrow(() -> new StudentFeeMapNotFoundException("Student Fee Mapping Not Found for Id: " + mapId));
+                .orElseThrow(() -> new StudentFeeMapNotFoundException("StudentFeeMap not found for ID: " + mapId));
 
         // 2. Find the related entities
         Student student = findStudentById(updateDTO.getStudentId());
         FeeStructure feeStructure = findFeeStructureById(updateDTO.getStructureId());
 
-        // 3. Use ModelMapper to update simple fields
-        // We configure it to skip nulls, but for a PUT this is standard.
-        // For a more robust PATCH, this would be different.
+        // 3. Use ModelMapper for updates (this is safer)
         modelMapper.map(updateDTO, existingMap);
 
         // 4. Manually update complex relationships
@@ -77,15 +79,15 @@ public class StudentFeeMapServiceImpl implements StudentFeeMapService {
     }
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public StudentFeeMapResponseDTO getStudentFeeMapById(Long mapId) {
         StudentFeeMap studentFeeMap = studentFeeMapRepository.findById(mapId)
-                .orElseThrow(() -> new StudentFeeMapNotFoundException("Student Fee Mapping Not Found for Id: " + mapId));
+                .orElseThrow(() -> new StudentFeeMapNotFoundException("Student fee mapping doesn't found for ID: " + mapId));
         return studentFeeMapMapper.toDto(studentFeeMap);
     }
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public List<StudentFeeMapResponseDTO> getAllStudentFeeMaps() {
         return studentFeeMapRepository.findAll().stream()
                 .map(studentFeeMapMapper::toDto)
@@ -96,12 +98,11 @@ public class StudentFeeMapServiceImpl implements StudentFeeMapService {
 
     private Student findStudentById(Long studentId) {
         return studentRepository.findById(studentId)
-                .orElseThrow(() -> new StudentNotFoundException("" + studentId));
+                .orElseThrow(() -> new StudentNotFoundException("Student not found with id: " + studentId));
     }
 
     private FeeStructure findFeeStructureById(Long structureId) {
         return feeStructureRepository.findById(structureId)
-                .orElseThrow(() -> new FeeStructureNotFoundException("" + structureId));
+                .orElseThrow(() -> new FeeStructureNotFoundException("Fee Structure not found with id:"  + structureId));
     }
-
 }

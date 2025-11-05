@@ -46,7 +46,7 @@ public class FeeType {
     @Column(name = "description", length = 255)
     private String description;
 
-    @Column(name="is_active)", nullable = false)
+    @Column(name="is_active", nullable = false)
     @ColumnDefault("true")
-    private Boolean isActive;
+    private Boolean isActive = true;
 }
