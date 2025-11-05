@@ -10,6 +10,7 @@ spring:
   # --- JPA / Hibernate Common Settings ---
   jpa:
     hibernate:
+#      Strictly do not change this to create
       ddl-auto: update # Set in default, can be overridden by 'prod'
     show-sql: true       # Set in default, can be overridden by 'prod'
     properties:
@@ -44,7 +45,7 @@ spring:
     driver-class-name: org.postgresql.Driver
 
     # Configuration credentials are being read from .env file
-    url: ${DB_URL}
+    url: ${DB_URL}?prepareThreshold=0
     username: ${DB_USER}
     password: ${DB_PASS}
 

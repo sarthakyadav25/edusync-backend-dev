@@ -11,5 +11,17 @@ public enum StaffType {
     PRINCIPAL,
     SECURITY_GUARD,
     ADMINISTRATIVE_STAFF,
+    /**
+     * Manages all administrative functions for a specific school.
+     * This is the highest-level user *within* a school.
+     */
+    SCHOOL_ADMIN,
+
+    /**
+     * Manages the entire EduSync SaaS platform.
+     * This role is for EduSync.ai employees to manage schools,
+     * platform configuration, and support.
+     */
+    SUPER_ADMIN,
     OTHER
 }

@@ -26,4 +26,6 @@ public interface UserRepository extends JpaRepository<User, Integer> {
             "LEFT JOIN FETCH r.permissions p " +
             "WHERE u.username = :username")
     Optional<User> findByUsernameWithAuthorities(@Param("username") String username);
+
+    boolean existsByEmail(String email);
 }
