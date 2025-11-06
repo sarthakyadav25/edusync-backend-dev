@@ -1,22 +1,21 @@
 package com.project.edusync.em.model.dto.RequestDTO;
 
-
 import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.FutureOrPresent;
-import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.UUID;
 
 /**
- * DTO for creating a new ExamSchedule.
- * The parent Exam UUID will be part of the URL path (e.g., /api/exams/{uuid}/schedules).
+ * DTO for creating or updating an ExamSchedule.
+ * Uses UUIDs for external references to ensure API security and decoupling.
  */
 @Data
 @Builder
@@ -24,16 +23,15 @@ import java.time.LocalTime;
 @AllArgsConstructor
 public class ExamScheduleRequestDTO {
 
-    @NotNull(message = "Class ID is required")
-    private Long classId;
+    @NotNull(message = "Class UUID is required")
+    private UUID classId;
 
-    private Long sectionId; // Optional
+    private UUID sectionId; // Optional, as an exam might be for the whole class
 
-    @NotNull(message = "Subject ID is required")
-    private Long subjectId;
+    @NotNull(message = "Subject UUID is required")
+    private UUID subjectId;
 
     @NotNull(message = "Exam date is required")
-    @FutureOrPresent(message = "Exam date must be in the present or future")
     private LocalDate examDate;
 
     @NotNull(message = "Start time is required")
@@ -43,13 +41,13 @@ public class ExamScheduleRequestDTO {
     private LocalTime endTime;
 
     @NotNull(message = "Max marks are required")
-    @DecimalMin(value = "1.0", message = "Max marks must be at least 1")
+    @DecimalMin(value = "1.0", message = "Max marks must be at least 1.0")
     private BigDecimal maxMarks;
 
     @NotNull(message = "Passing marks are required")
     @DecimalMin(value = "0.0", message = "Passing marks cannot be negative")
     private BigDecimal passingMarks;
 
-    @Size(max = 50)
+    @Size(max = 50, message = "Room number must be under 50 characters")
     private String roomNumber;
 }
