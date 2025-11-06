@@ -8,15 +8,11 @@ import com.project.edusync.enrollment.util.RegisterUserByRole; // <-- NEW MOCK
 import com.project.edusync.iam.model.entity.Role;
 import com.project.edusync.iam.repository.RoleRepository;
 import com.project.edusync.iam.repository.UserRepository;
-import com.project.edusync.uis.model.entity.Staff;
-import com.project.edusync.uis.model.entity.Student;
-import com.project.edusync.uis.model.entity.UserProfile;
 import com.project.edusync.uis.model.enums.Department;
 import com.project.edusync.uis.model.enums.Gender;
 import com.project.edusync.uis.model.enums.StaffType;
 import com.project.edusync.uis.repository.StaffRepository;
 import com.project.edusync.uis.repository.StudentRepository;
-import com.project.edusync.uis.repository.UserProfileRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,7 +26,6 @@ import org.springframework.security.crypto.password.PasswordEncoder; // Keep thi
 import java.time.LocalDate;
 import java.util.Collections;
 import java.util.Map;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
