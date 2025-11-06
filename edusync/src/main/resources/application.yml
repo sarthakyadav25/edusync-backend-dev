@@ -21,6 +21,9 @@ spring:
 # APPLICATION-SPECIFIC PROPERTIES
 # ===================================================================
 app:
+  razorpay:
+    key-id: ${RAZORPAY_KEY_ID}
+    key-secret: ${RAZORPAY_KEY_SECRET}
   jwt:
     # This is your security config
     secret-key: ${JWT_SECRET_KEY}
