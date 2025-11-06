@@ -1,4 +1,5 @@
 package com.project.edusync.em.model.dto.RequestDTO;
+
 import com.project.edusync.em.model.enums.DifficultyLevel;
 import com.project.edusync.em.model.enums.QuestionType;
 import jakarta.validation.constraints.DecimalMin;
@@ -9,25 +10,23 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import java.math.BigDecimal;
 
-/**
- * DTO for creating a new question in the QuestionBank.
- * 'createdBy' will be set automatically from the security context.
- */
+import java.math.BigDecimal;
+import java.util.UUID;
+
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class QuestionBankRequestDTO {
 
-    @NotNull(message = "Subject ID is required")
-    private Long subjectId;
+    @NotNull(message = "Subject UUID is required")
+    private UUID subjectId;
 
-    @NotNull(message = "Class ID is required")
-    private Long classId;
+    @NotNull(message = "Class UUID is required")
+    private UUID classId;
 
-    @Size(max = 255)
+    @Size(max = 255, message = "Topic must be less than 255 characters")
     private String topic;
 
     @NotNull(message = "Question type is required")
@@ -36,10 +35,10 @@ public class QuestionBankRequestDTO {
     @NotNull(message = "Difficulty level is required")
     private DifficultyLevel difficultyLevel;
 
-    @NotBlank(message = "Question text cannot be blank")
+    @NotBlank(message = "Question text is required")
     private String questionText;
 
-    // Optional: Service layer should validate these if type is MCQ
+    // Options for MCQs (can be null for other types)
     private String optionA;
     private String optionB;
     private String optionC;
