@@ -6,17 +6,14 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 
-/**
- * DTO for returning GradeScale data.
- * This entity is not auditable, so it returns its Long PK.
- */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class GradeScaleResponseDTO {
-
     private Long gradeScaleId;
+    // Useful to know which system this belongs to when fetching individually
+    private String systemName;
     private String gradeName;
     private BigDecimal minPercentage;
     private BigDecimal maxPercentage;

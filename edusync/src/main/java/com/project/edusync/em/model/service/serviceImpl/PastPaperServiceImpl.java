@@ -1,0 +1,141 @@
+package com.project.edusync.em.model.service.serviceImpl;
+
+import com.project.edusync.adm.model.entity.AcademicClass;
+import com.project.edusync.adm.model.entity.Subject;
+import com.project.edusync.adm.repository.AcademicClassRepository;
+import com.project.edusync.adm.repository.SubjectRepository;
+import com.project.edusync.common.exception.emException.EdusyncException;
+import com.project.edusync.em.model.dto.RequestDTO.PastPaperRequestDTO;
+import com.project.edusync.em.model.dto.ResponseDTO.PastPaperResponseDTO;
+import com.project.edusync.em.model.entity.PastPaper;
+import com.project.edusync.em.model.repository.PastPaperRepository;
+import com.project.edusync.em.model.service.PastPaperService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+@Transactional
+public class PastPaperServiceImpl implements PastPaperService {
+
+    private final PastPaperRepository pastPaperRepository;
+    private final AcademicClassRepository academicClassRepository;
+    private final SubjectRepository subjectRepository;
+
+    // Configuration for local file storage (replace with cloud storage in prod)
+    private final Path fileStorageLocation = Paths.get("uploads/past-papers").toAbsolutePath().normalize();
+
+    @Override
+    public PastPaperResponseDTO uploadPastPaper(PastPaperRequestDTO requestDTO, MultipartFile file) {
+        log.info("Uploading past paper: {}", requestDTO.getTitle());
+
+        if (file.isEmpty()) {
+            throw new EdusyncException("EM-400", "File cannot be empty", HttpStatus.BAD_REQUEST);
+        }
+
+        // 1. Validate and Fetch related entities
+        AcademicClass academicClass = academicClassRepository.findById(requestDTO.getClassId())
+                .orElseThrow(() -> new EdusyncException("ADM-404", "Class not found", HttpStatus.NOT_FOUND));
+        Subject subject = subjectRepository.findActiveById(requestDTO.getSubjectId())
+                .orElseThrow(() -> new EdusyncException("ADM-404", "Subject not found", HttpStatus.NOT_FOUND));
+
+        // 2. Store the file physically
+        String fileName = storeFile(file);
+        String fileUrl = "/api/v1/public/files/" + fileName; // Example public URL pattern
+
+        // 3. Save metadata to DB
+        PastPaper pastPaper = new PastPaper();
+        pastPaper.setTitle(requestDTO.getTitle());
+        pastPaper.setAcademicClass(academicClass);
+        pastPaper.setSubject(subject);
+        pastPaper.setExamYear(requestDTO.getExamYear());
+        pastPaper.setExamType(requestDTO.getExamType());
+        pastPaper.setFileUrl(fileUrl);
+        pastPaper.setFileMimeType(file.getContentType());
+        pastPaper.setFileSizeKb((int) (file.getSize() / 1024));
+
+        PastPaper savedPaper = pastPaperRepository.save(pastPaper);
+        log.info("Past paper uploaded successfully with UUID: {}", savedPaper.getUuid());
+
+        return toResponseDTO(savedPaper);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PastPaperResponseDTO getPastPaperByUuid(UUID uuid) {
+        log.info("Fetching past paper UUID: {}", uuid);
+        PastPaper paper = pastPaperRepository.findByUuid(uuid)
+                .orElseThrow(() -> new EdusyncException("EM-404", "Past paper not found", HttpStatus.NOT_FOUND));
+        return toResponseDTO(paper);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PastPaperResponseDTO> getAllPastPapers(UUID classId, UUID subjectId, Integer year) {
+        log.info("Fetching past papers with filters - Class: {}, Subject: {}, Year: {}", classId, subjectId, year);
+        return pastPaperRepository.findAllByFilters(classId, subjectId, year)
+                .stream()
+                .map(this::toResponseDTO)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public void deletePastPaper(UUID uuid) {
+        log.info("Deleting past paper UUID: {}", uuid);
+        PastPaper paper = pastPaperRepository.findByUuid(uuid)
+                .orElseThrow(() -> new EdusyncException("EM-404", "Past paper not found", HttpStatus.NOT_FOUND));
+
+        // TODO: Delete the actual file from storage here using paper.getFileUrl()
+        // deleteFile(paper.getFileUrl());
+
+        pastPaperRepository.delete(paper);
+    }
+
+    // --- Helper Methods ---
+
+    private String storeFile(MultipartFile file) {
+        try {
+            Files.createDirectories(fileStorageLocation);
+            // Generate a unique filename to prevent overwrites
+            String fileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
+            Path targetLocation = fileStorageLocation.resolve(fileName);
+            Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
+            return fileName;
+        } catch (IOException ex) {
+            log.error("Could not store file " + file.getOriginalFilename(), ex);
+            throw new EdusyncException("EM-500", "Could not store file. Please try again.", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    private PastPaperResponseDTO toResponseDTO(PastPaper entity) {
+        return PastPaperResponseDTO.builder()
+                .uuid(entity.getUuid())
+                .classId(entity.getAcademicClass().getUuid())
+                .className(entity.getAcademicClass().getName())
+                .subjectId(entity.getSubject().getUuid())
+                .subjectName(entity.getSubject().getName())
+                .title(entity.getTitle())
+                .examYear(entity.getExamYear())
+                .examType(entity.getExamType())
+                .fileUrl(entity.getFileUrl())
+                .fileMimeType(entity.getFileMimeType())
+                .fileSizeKb(entity.getFileSizeKb())
+                .uploadedAt(entity.getCreatedAt()) // Mapped from remapped field in entity
+                .uploadedBy(entity.getCreatedBy())
+                .build();
+    }
+}

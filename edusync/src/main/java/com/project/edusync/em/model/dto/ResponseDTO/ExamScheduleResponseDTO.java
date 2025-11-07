@@ -1,10 +1,10 @@
 package com.project.edusync.em.model.dto.ResponseDTO;
 
-
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -12,7 +12,7 @@ import java.util.UUID;
 
 /**
  * DTO for sending ExamSchedule data to the client.
- * This entity is not auditable, so it returns its Long PK.
+ * Includes rich data (names) to reduce frontend API chatter.
  */
 @Data
 @Builder
@@ -21,15 +21,20 @@ import java.util.UUID;
 public class ExamScheduleResponseDTO {
 
     private Long scheduleId;
-    private UUID examUuid; // The public UUID of the parent Exam
-    private Long classId;
-    private Long sectionId;
-    private Long subjectId;
+    private UUID examUuid; // Public ID of the parent Exam
+
+    // Rich data for UI display
+    private UUID classId;
+    private String className;
+    private UUID sectionId;
+    private String sectionName;
+    private UUID subjectId;
+    private String subjectName;
+
     private LocalDate examDate;
     private LocalTime startTime;
     private LocalTime endTime;
     private BigDecimal maxMarks;
     private BigDecimal passingMarks;
     private String roomNumber;
-
 }

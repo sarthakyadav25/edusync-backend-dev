@@ -1,6 +1,5 @@
 package com.project.edusync.em.model.dto.RequestDTO;
 
-
 import com.project.edusync.em.model.enums.PastExamType;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -11,30 +10,27 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * DTO for creating a new PastPaper metadata entry.
- * The actual file upload (MultipartFile) will be handled by the controller,
- * not this DTO. 'uploadedBy' will be set from the security context.
- */
+import java.util.UUID;
+
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class PastPaperRequestDTO {
 
-    @NotBlank(message = "Title cannot be blank")
-    @Size(max = 255)
+    @NotBlank(message = "Title is required")
+    @Size(max = 255, message = "Title must be less than 255 characters")
     private String title;
 
-    @NotNull(message = "Class ID is required")
-    private Long classId;
+    @NotNull(message = "Class UUID is required")
+    private UUID classId;
 
-    @NotNull(message = "Subject ID is required")
-    private Long subjectId;
+    @NotNull(message = "Subject UUID is required")
+    private UUID subjectId;
 
     @NotNull(message = "Exam year is required")
-    @Min(value = 1990, message = "Exam year must be valid")
+    @Min(value = 2000, message = "Exam year must be valid (e.g., 2000 or later)")
     private Integer examYear;
 
-    private PastExamType examType; // This can be optional
+    private PastExamType examType; // Optional
 }

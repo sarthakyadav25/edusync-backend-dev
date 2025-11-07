@@ -1,0 +1,151 @@
+package com.project.edusync.em.model.service.serviceImpl;
+
+import com.project.edusync.adm.model.entity.AcademicClass;
+import com.project.edusync.adm.model.entity.Section;
+import com.project.edusync.adm.model.entity.Subject;
+import com.project.edusync.adm.repository.AcademicClassRepository;
+import com.project.edusync.adm.repository.SectionRepository;
+import com.project.edusync.adm.repository.SubjectRepository;
+import com.project.edusync.common.exception.emException.EdusyncException;
+import com.project.edusync.common.exception.emException.ExamNotFoundException;
+import com.project.edusync.em.model.dto.RequestDTO.ExamScheduleRequestDTO;
+import com.project.edusync.em.model.dto.ResponseDTO.ExamScheduleResponseDTO;
+import com.project.edusync.em.model.entity.Exam;
+import com.project.edusync.em.model.entity.ExamSchedule;
+import com.project.edusync.em.model.repository.ExamRepository;
+import com.project.edusync.em.model.repository.ExamScheduleRepository;
+import com.project.edusync.em.model.service.ExamScheduleService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+@Transactional
+public class ExamScheduleServiceImpl implements ExamScheduleService {
+
+    private final ExamScheduleRepository examScheduleRepository;
+    private final ExamRepository examRepository;
+    // Repositories for ADM entities
+    private final AcademicClassRepository academicClassRepository;
+    private final SectionRepository sectionRepository;
+    private final SubjectRepository subjectRepository;
+
+    @Override
+    public ExamScheduleResponseDTO createSchedule(UUID examUuid, ExamScheduleRequestDTO requestDTO) {
+        Exam exam = examRepository.findByUuid(examUuid)
+                .orElseThrow(() -> new ExamNotFoundException(examUuid));
+
+        validateRequest(requestDTO);
+
+        ExamSchedule schedule = new ExamSchedule();
+        schedule.setExam(exam);
+        mapDtoToEntity(requestDTO, schedule);
+
+        return mapEntityToResponse(examScheduleRepository.save(schedule));
+    }
+
+    @Override
+    public ExamScheduleResponseDTO updateSchedule(Long scheduleId, ExamScheduleRequestDTO requestDTO) {
+        ExamSchedule schedule = examScheduleRepository.findById(scheduleId)
+                .orElseThrow(() -> new EdusyncException("EM-404", "Exam Schedule not found", HttpStatus.NOT_FOUND));
+
+        validateRequest(requestDTO);
+        mapDtoToEntity(requestDTO, schedule);
+
+        return mapEntityToResponse(examScheduleRepository.save(schedule));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ExamScheduleResponseDTO> getSchedulesByExam(UUID examUuid) {
+        Exam exam = examRepository.findByUuid(examUuid)
+                .orElseThrow(() -> new ExamNotFoundException(examUuid));
+
+        return exam.getSchedules().stream()
+                .map(this::mapEntityToResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ExamScheduleResponseDTO getScheduleById(Long scheduleId) {
+        ExamSchedule schedule = examScheduleRepository.findById(scheduleId)
+                .orElseThrow(() -> new EdusyncException("EM-404", "Exam Schedule not found", HttpStatus.NOT_FOUND));
+        return mapEntityToResponse(schedule);
+    }
+
+    @Override
+    public void deleteSchedule(Long scheduleId) {
+        if (!examScheduleRepository.existsById(scheduleId)) {
+            throw new EdusyncException("EM-404", "Exam Schedule not found", HttpStatus.NOT_FOUND);
+        }
+        // TODO: Add check here to prevent deletion if marks have already been entered for this schedule.
+        examScheduleRepository.deleteById(scheduleId);
+    }
+
+    // --- Helper Methods ---
+
+    private void validateRequest(ExamScheduleRequestDTO dto) {
+        if (!dto.getEndTime().isAfter(dto.getStartTime())) {
+            throw new EdusyncException("EM-400", "End time must be after start time", HttpStatus.BAD_REQUEST);
+        }
+        if (dto.getPassingMarks().compareTo(dto.getMaxMarks()) > 0) {
+            throw new EdusyncException("EM-400", "Passing marks cannot be greater than max marks", HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    private void mapDtoToEntity(ExamScheduleRequestDTO dto, ExamSchedule entity) {
+        // Fetch related ADM entities. Assuming they have 'findByUuid' methods.
+        AcademicClass academicClass = academicClassRepository.findById(dto.getClassId())
+                .orElseThrow(() -> new EdusyncException("ADM-404", "Class not found", HttpStatus.NOT_FOUND));
+        entity.setAcademicClass(academicClass);
+
+        Subject subject = subjectRepository.findActiveById(dto.getSubjectId())
+                .orElseThrow(() -> new EdusyncException("ADM-404", "Subject not found", HttpStatus.NOT_FOUND));
+        entity.setSubject(subject);
+
+        if (dto.getSectionId() != null) {
+            Section section = sectionRepository.findById(dto.getSectionId())
+                    .orElseThrow(() -> new EdusyncException("ADM-404", "Section not found", HttpStatus.NOT_FOUND));
+            // Validate section belongs to class
+            if (!section.getAcademicClass().equals(academicClass)) {
+                throw new EdusyncException("EM-400", "Section does not belong to the selected class", HttpStatus.BAD_REQUEST);
+            }
+            entity.setSection(section);
+        } else {
+            entity.setSection(null);
+        }
+
+        entity.setExamDate(dto.getExamDate());
+        entity.setStartTime(dto.getStartTime());
+        entity.setEndTime(dto.getEndTime());
+        entity.setMaxMarks(dto.getMaxMarks());
+        entity.setPassingMarks(dto.getPassingMarks());
+        entity.setRoomNumber(dto.getRoomNumber());
+    }
+
+    private ExamScheduleResponseDTO mapEntityToResponse(ExamSchedule entity) {
+        return ExamScheduleResponseDTO.builder()
+                .scheduleId(entity.getScheduleId())
+                .examUuid(entity.getExam().getUuid())
+                .classId(entity.getAcademicClass().getUuid())
+                .className(entity.getAcademicClass().getName())
+                .sectionId(entity.getSection() != null ? entity.getSection().getUuid() : null)
+                .sectionName(entity.getSection() != null ? entity.getSection().getSectionName() : null)
+                .subjectId(entity.getSubject().getUuid())
+                .subjectName(entity.getSubject().getName())
+                .examDate(entity.getExamDate())
+                .startTime(entity.getStartTime())
+                .endTime(entity.getEndTime())
+                .maxMarks(entity.getMaxMarks())
+                .passingMarks(entity.getPassingMarks())
+                .roomNumber(entity.getRoomNumber())
+                .build();
+    }
+}

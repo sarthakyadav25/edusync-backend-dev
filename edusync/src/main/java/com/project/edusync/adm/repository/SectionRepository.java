@@ -15,7 +15,7 @@ public interface SectionRepository extends JpaRepository<Section, Long> {
     @Query("SELECT s FROM Section s JOIN FETCH s.academicClass")
     List<Section> findAllWithClass();
 
-    @Query("SELECT s FROM Section s where s.uuid = :classId")
+    @Query("SELECT s FROM Section s where s.uuid = :sectionId")
     Optional<Section> findById(UUID sectionId);
 
     @Query("SELECT s from Section s Where s.uuid = :sectionId")

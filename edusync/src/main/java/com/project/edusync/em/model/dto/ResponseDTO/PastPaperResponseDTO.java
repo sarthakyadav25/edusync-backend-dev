@@ -1,4 +1,5 @@
 package com.project.edusync.em.model.dto.ResponseDTO;
+
 import com.project.edusync.em.model.enums.PastExamType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -8,10 +9,6 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * DTO for sending PastPaper information back to the client.
- * This includes the public UUID and the full file URL.
- */
 @Data
 @Builder
 @NoArgsConstructor
@@ -19,16 +16,19 @@ import java.util.UUID;
 public class PastPaperResponseDTO {
 
     private UUID uuid;
+    // Rich data for UI
+    private UUID classId;
+    private String className;
+    private UUID subjectId;
+    private String subjectName;
+
     private String title;
-    private Long classId;
-    private Long subjectId;
     private Integer examYear;
     private PastExamType examType;
-    private String fileUrl;
+    private String fileUrl;      // Publicly accessible URL
     private String fileMimeType;
     private Integer fileSizeKb;
-    private LocalDateTime uploadedAt; // Mapped from AuditableEntity.createdAt
-    private String uploadedBy;     // Mapped from AuditableEntity.createdBy (renamed)
-    private LocalDateTime updatedAt;
-    private String updatedBy;
+
+    private LocalDateTime uploadedAt;
+    private String uploadedBy;
 }
