@@ -6,6 +6,19 @@ spring:
     name: edusync
   profiles:
     active: dev # Run in 'dev' mode by default
+  mail:
+    host: ${MAIL_HOST}
+    port: ${MAIL_PORT}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+    # This is the "From" address that will appear on the email
+    from: ${MAIL_FROM:no-reply@edusync.ai}
 
   # --- JPA / Hibernate Common Settings ---
   jpa:
@@ -25,11 +38,16 @@ app:
     key-id: ${RAZORPAY_KEY_ID}
     key-secret: ${RAZORPAY_KEY_SECRET}
   jwt:
-    # This is your security config
+    # This is security config
     secret-key: ${JWT_SECRET_KEY}
     expirationTime: ${JWT_EXPIRATION_TIME}
+    refresh-expirationTime: ${REFRESH_EXPIRATION_TIME}
+    password-reset-expirationTime: ${PASSWORD_RESET_TIME}
 
-
+  # URL for the frontend (used to build links in emails)
+  frontend:
+      # This should be your frontend's URL (e.g., http://localhost:3000)
+    url: ${APP_FRONTEND_URL}
 ---
 
 api:
@@ -43,7 +61,7 @@ spring:
     activate:
       on-profile: dev
 
-  # --- AivenDB Datasource Configuration ---
+  # --- Database Datasource Configuration ---
   datasource:
     driver-class-name: org.postgresql.Driver
 

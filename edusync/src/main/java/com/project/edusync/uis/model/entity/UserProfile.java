@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDate;
+import java.util.Set;
 
 @Entity
 @Table(name = "user_profiles")
@@ -55,8 +56,17 @@ public class UserProfile extends AuditableEntity {
      * a login account (User) is provisioned for them.
      */
     @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", referencedColumnName = "id", unique = true)
+    @JoinColumn(
+            name = "user_id",               // The column name in THIS table (uis_user_profiles)
+            referencedColumnName = "id",    // The PK column name in the OTHER table (iam_users)
+            nullable = false,
+            unique = true
+    )
     private User user;
+
+
+    @OneToMany(mappedBy = "userProfile", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private Set<UserAddress> addresses;
 
     /*
      * NOTE: We do not have fields like 'private Student student' here.

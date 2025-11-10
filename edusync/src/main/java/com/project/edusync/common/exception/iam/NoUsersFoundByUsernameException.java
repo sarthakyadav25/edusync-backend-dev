@@ -1,6 +1,10 @@
 package com.project.edusync.common.exception.iam;
 
-public class NoUsersFoundByUsernameException extends RuntimeException {
+import com.project.edusync.common.exception.EdusyncException;
+import org.springframework.http.HttpStatus;
+
+public class NoUsersFoundByUsernameException extends InvalidCredentialsException {
+
     public NoUsersFoundByUsernameException(String message) {
         super(message);
     }

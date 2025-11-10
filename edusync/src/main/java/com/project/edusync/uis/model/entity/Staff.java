@@ -1,6 +1,7 @@
 package com.project.edusync.uis.model.entity;
 
 import com.project.edusync.common.model.AuditableEntity;
+import com.project.edusync.iam.model.entity.User;
 import com.project.edusync.uis.model.enums.Department;
 import com.project.edusync.uis.model.enums.StaffType;
 import jakarta.persistence.*;
@@ -51,11 +52,21 @@ public class Staff extends AuditableEntity {
      * This links the Staff "Role" to the "Person" (UserProfile).
      * The 'profile_id' column must be unique.
      */
+
+    @OneToOne(fetch = FetchType.LAZY)
+    // --- THIS IS THE FIX ---
+    @JoinColumn(
+            name = "user_id",               // Column in uis_staff table
+            referencedColumnName = "id",    // Column in iam_users table
+            unique = true
+    )
+    private User user;
+
     @OneToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "profile_id", referencedColumnName = "id", unique = true)
     private UserProfile userProfile;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "manager_staff_id")
+    @JoinColumn(name = "manager_staff_id", referencedColumnName = "id")
     private Staff manager;
 }

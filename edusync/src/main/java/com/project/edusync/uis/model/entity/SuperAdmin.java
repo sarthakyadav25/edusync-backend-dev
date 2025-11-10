@@ -20,7 +20,12 @@ public class SuperAdmin {
 
     @OneToOne(fetch = FetchType.LAZY)
     @MapsId
-    @JoinColumn(name = "user_id")
+    @JoinColumn(
+            name = "user_id",               // The column name in THIS table (uis_user_profiles)
+            referencedColumnName = "id",    // The PK column name in the OTHER table (iam_users)
+            nullable = false,
+            unique = true
+    )
     private User user;
 
     // Field specific to a Super Admin
