@@ -65,7 +65,7 @@ spring:
   datasource:
     driver-class-name: org.postgresql.Driver
 
-    # Configuration credentials are being read from .env file
+    # Configuration credentials are being read from this .env file
     url: ${DB_URL}?prepareThreshold=0
     username: ${DB_USER}
     password: ${DB_PASS}
@@ -75,3 +75,7 @@ spring:
     hikari:
       connection-timeout: 30000
 
+
+security:
+  # Max number of active devices (refresh tokens) per user
+  max-devices: 2

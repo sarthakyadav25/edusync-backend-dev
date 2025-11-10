@@ -12,5 +12,21 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
 
     Optional<RefreshToken> findByToken(String token);
 
-    void deleteByUser(User user); // Good for cleanup if needed
+    /**
+     * Finds an active (non-invalidated) token by its token string.
+     */
+    Optional<RefreshToken> findByTokenAndInvalidated(String token, boolean invalidated);
+
+    /**
+     * Counts all active (non-invalidated) tokens for a specific user.
+     * This tells us how many "devices" are currently active.
+     */
+    long countByUserAndInvalidated(User user, boolean invalidated);
+
+    /**
+     * Finds the oldest active (non-invalidated) token for a user,
+     * ordered by its creation date. We use this to decide which token
+     * to invalidate when the user exceeds the device limit.
+     */
+    Optional<RefreshToken> findFirstByUserAndInvalidatedOrderByCreatedAtAsc(User user, boolean invalidated);
 }
