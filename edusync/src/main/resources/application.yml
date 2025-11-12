@@ -24,7 +24,7 @@ spring:
   jpa:
     hibernate:
 #      Strictly do not change this to create
-      ddl-auto: update # Set in default, can be overridden by 'prod'
+      ddl-auto: validate # Set in default, can be overridden by 'prod'
     show-sql: true       # Set in default, can be overridden by 'prod'
     properties:
       hibernate:

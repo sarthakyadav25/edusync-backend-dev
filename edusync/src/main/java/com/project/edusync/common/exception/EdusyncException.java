@@ -1,4 +1,3 @@
-// File: com/project/edusync/common/exception/EdusyncException.java
 package com.project.edusync.common.exception;
 
 import org.springframework.http.HttpStatus;

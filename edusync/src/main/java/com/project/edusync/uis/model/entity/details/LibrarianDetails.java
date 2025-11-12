@@ -8,6 +8,8 @@ import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import java.util.List;
+
 @Entity
 @Table(name = "librarian_details")
 @Getter
@@ -38,7 +40,7 @@ public class LibrarianDetails {
      */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "library_system_permissions", columnDefinition = "jsonb")
-    private String librarySystemPermissions;
+    private List<String> librarySystemPermissions;
 
     /**
      * A boolean flag as specified in your documentation.

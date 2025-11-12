@@ -30,4 +30,6 @@ public interface UserRepository extends JpaRepository<User, Integer> {
 
     @Query("SELECT u.email FROM User u WHERE u.email IN :emails")
     Set<String> findEmailsThatExist(@Param("emails") Set<String> emails);
+
+    boolean existsByUsername(String enrollmentNumber);
 }

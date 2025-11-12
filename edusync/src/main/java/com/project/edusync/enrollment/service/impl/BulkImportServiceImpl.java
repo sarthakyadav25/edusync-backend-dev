@@ -1,10 +1,13 @@
 package com.project.edusync.enrollment.service.impl;
 
 import com.opencsv.CSVReader;
-import com.opencsv.exceptions.CsvException; // Correct exception
+import com.opencsv.exceptions.CsvException;
 import com.opencsv.exceptions.CsvValidationException;
 import com.project.edusync.adm.model.entity.Section;
 import com.project.edusync.adm.repository.SectionRepository;
+import com.project.edusync.common.exception.enrollment.InvalidCsvHeaderException;
+import com.project.edusync.common.exception.enrollment.RelatedResourceNotFoundException;
+import com.project.edusync.common.exception.enrollment.ResourceDuplicateException;
 import com.project.edusync.enrollment.model.dto.BulkImportReportDTO;
 import com.project.edusync.enrollment.service.BulkImportService;
 import com.project.edusync.enrollment.util.CsvValidationHelper;
@@ -12,8 +15,6 @@ import com.project.edusync.enrollment.util.RegisterUserByRole;
 import com.project.edusync.iam.model.entity.Role;
 import com.project.edusync.iam.repository.RoleRepository;
 import com.project.edusync.iam.repository.UserRepository;
-import com.project.edusync.uis.model.entity.details.PrincipalDetails; // For Enums
-import com.project.edusync.uis.model.entity.details.TeacherDetails; // For Enums
 import com.project.edusync.uis.model.enums.*;
 import com.project.edusync.uis.repository.StaffRepository;
 import com.project.edusync.uis.repository.StudentRepository;
@@ -108,7 +109,6 @@ public class BulkImportServiceImpl implements BulkImportService {
     @Override
     public BulkImportReportDTO importUsers(MultipartFile file, String userType) throws IOException {
 
-        // --- 1. PRE-FETCH CACHES (The Optimization) ---
         log.info("Building caches for roles and sections...");
         final Map<String, Role> roleCache = roleRepository.findAll().stream()
                 .collect(Collectors.toMap(Role::getName, role -> role));
@@ -120,7 +120,6 @@ public class BulkImportServiceImpl implements BulkImportService {
                 ));
         log.info("Caches built with {} roles and {} sections. Starting row processing...", roleCache.size(), sectionCache.size());
 
-        // --- 2. Resilient Row-by-Row Loop ---
         BulkImportReportDTO report = new BulkImportReportDTO();
         report.setStatus("PROCESSING");
         int rowNumber = 1, successCount = 0, failureCount = 0;
@@ -128,10 +127,11 @@ public class BulkImportServiceImpl implements BulkImportService {
         try (Reader reader = new InputStreamReader(file.getInputStream());
              CSVReader csvReader = new CSVReader(reader)) {
 
-            // --- HEADER VALIDATION (NEW) ---
-            String[] header = csvReader.readNext(); // Read the header row
+            // --- HEADER VALIDATION ---
+            String[] header = csvReader.readNext();
             if (header == null) {
-                throw new CsvValidationException("File is empty or header is missing.");
+                // USE: InvalidCsvHeaderException (Fatal)
+                throw new InvalidCsvHeaderException("File is empty or header is missing.");
             }
 
             final List<String> expectedHeader;
@@ -143,11 +143,11 @@ public class BulkImportServiceImpl implements BulkImportService {
                 throw new IllegalArgumentException("Invalid userType: " + userType);
             }
 
-            // Perform strict header validation
             List<String> actualHeader = Arrays.asList(header);
             if (!actualHeader.equals(expectedHeader)) {
                 log.warn("CSV Header Validation FAILED. Expected: {}, Found: {}", expectedHeader, actualHeader);
-                throw new CsvValidationException(
+                // USE: InvalidCsvHeaderException (Fatal)
+                throw new InvalidCsvHeaderException(
                         String.format("Invalid CSV header. Expected: %s, Found: %s", expectedHeader, actualHeader)
                 );
             }
@@ -156,44 +156,41 @@ public class BulkImportServiceImpl implements BulkImportService {
 
 
             String[] row;
-            // This is the heart of the "Resilient" model.
-            // We loop, and each row's success or failure is independent.
             while ((row = csvReader.readNext()) != null) {
                 rowNumber++;
                 try {
-                    // This is the "Orchestrator" try-catch block.
+                    // This try-catch now handles DataParsingException,
+                    // ResourceDuplicateException, and RelatedResourceNotFoundException
+                    // on a per-row basis.
                     if (USER_TYPE_STUDENTS.equalsIgnoreCase(userType)) {
                         processStudentRow(row, roleCache, sectionCache);
                         successCount++;
                     } else if (USER_TYPE_STAFF.equalsIgnoreCase(userType)) {
-                        // (REFACTORED) Delegate to the new router method
                         routeStaffRowProcessing(row, roleCache);
                         successCount++;
                     }
                 } catch (Exception e) {
-                    // If one row fails, we log it, add it to the report,
-                    // and continue to the next row.
+                    // All our custom exceptions will be caught here
                     failureCount++;
-                    String errorMessage = e.getMessage(); // Get the specific error
+                    String errorMessage = e.getMessage();
                     String error = String.format("Row %d: %s", rowNumber, errorMessage);
                     report.getErrorMessages().add(error);
                     log.warn("Failed to process row {}: {}", rowNumber, errorMessage);
                 }
             }
-        } catch (CsvValidationException e) { // Catches a badly formatted CSV file
+        } catch (CsvValidationException | InvalidCsvHeaderException e) {
+            // Catch fatal CSV errors
             report.setStatus("FAILED");
-            report.getErrorMessages().add("File is not a valid CSV: " + e.getMessage());
+            report.getErrorMessages().add("Fatal Error: " + e.getMessage());
             return report;
         }
 
-        // --- 3. Final Report Generation ---
         report.setStatus("COMPLETED");
-        report.setTotalRows(rowNumber - 1); // -1 for the header
+        report.setTotalRows(rowNumber - 1);
         report.setSuccessCount(successCount);
         report.setFailureCount(failureCount);
         return report;
     }
-
 
     /**
      * Processes and validates a single student row.
@@ -202,9 +199,10 @@ public class BulkImportServiceImpl implements BulkImportService {
     @Transactional(rollbackFor = Exception.class)
     public void processStudentRow(String[] row, Map<String, Role> roleCache, Map<String, Section> sectionCache) throws Exception {
         // 1. --- Parse & Validate Data (per students.csv spec) ---
+        // This section will now throw DataParsingException if it fails
         String firstName = validationHelper.validateString(row[0], "firstName");
         String lastName = validationHelper.validateString(row[1], "lastName");
-        String middleName = row[2]; // Optional field
+        String middleName = row[2];
         String email = validationHelper.validateEmail(row[3]);
         LocalDate dob = validationHelper.parseDate(row[4], "dateOfBirth");
         Integer rollNo = validationHelper.parseInt(row[5], "rollNo");
@@ -215,25 +213,32 @@ public class BulkImportServiceImpl implements BulkImportService {
         String sectionName = validationHelper.validateString(row[10], "sectionName");
 
         // 2. --- Validate Business Logic & Foreign Keys ---
+        if (userRepository.existsByUsername(enrollmentNumber)) {
+            // USE: ResourceDuplicateException
+            throw new ResourceDuplicateException("User with username '" + enrollmentNumber + "' already exists.");
+        }
         if (userRepository.existsByEmail(email)) {
-            throw new IllegalArgumentException("User with email '" + email + "' already exists.");
+            // USE: ResourceDuplicateException
+            throw new ResourceDuplicateException("User with email '" + email + "' already exists.");
         }
         if (studentRepository.existsByEnrollmentNumber(enrollmentNumber)) {
-            throw new IllegalArgumentException("Student with enrollment number '" + enrollmentNumber + "' already exists.");
+            // USE: ResourceDuplicateException
+            throw new ResourceDuplicateException("Student with enrollment number '" + enrollmentNumber + "' already exists.");
         }
 
         Section section = sectionCache.get(className + ":" + sectionName);
         if (section == null) {
-            throw new IllegalArgumentException("Section not found for class '" + className + "' and section '" + sectionName + "'.");
+            // USE: RelatedResourceNotFoundException
+            throw new RelatedResourceNotFoundException("Section not found for class '" + className + "' and section '" + sectionName + "'.");
         }
 
         Role studentRole = roleCache.get(ROLE_STUDENT);
         if (studentRole == null) {
-            throw new RuntimeException("CRITICAL: " + ROLE_STUDENT + " not found in database.");
+            // USE: RelatedResourceNotFoundException
+            throw new RelatedResourceNotFoundException("CRITICAL: " + ROLE_STUDENT + " not found in database.");
         }
 
         // 3. --- Delegate creation to the helper ---
-        // (This call remains the same, assuming it's already correct)
         registerUserByRole.RegisterStudent(
                 email, enrollmentNumber, DEFAULT_PASSWORD, studentRole,
                 firstName, lastName, middleName, dob, gender,
@@ -254,12 +259,9 @@ public class BulkImportServiceImpl implements BulkImportService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void routeStaffRowProcessing(String[] row, Map<String, Role> roleCache) throws Exception {
-        // Parse the "dispatch" column: staffType
-        // As per our STAFF_HEADER, this is at index 10.
+        // This will throw DataParsingException if row[10] is invalid
         StaffType staffType = validationHelper.parseEnum(StaffType.class, row[10], "staffType");
 
-        // Route to the specific parser.
-        // These private methods will run within this method's transaction.
         switch (staffType) {
             case TEACHER:
                 processTeacherRow(row, roleCache);
@@ -270,10 +272,6 @@ public class BulkImportServiceImpl implements BulkImportService {
             case LIBRARIAN:
                 processLibrarianRow(row, roleCache);
                 break;
-            // Add other staff types as needed
-            // case SECURITY_GUARD:
-            //    processSecurityGuardRow(row, roleCache);
-            //    break;
             default:
                 throw new IllegalArgumentException("Unsupported staff type '" + staffType + "' for bulk import.");
         }
@@ -308,33 +306,18 @@ public class BulkImportServiceImpl implements BulkImportService {
 
         // 3. --- Validate Business Logic ---
         if (userRepository.existsByEmail(email)) {
-            throw new IllegalArgumentException("User with email '" + email + "' already exists.");
+            throw new ResourceDuplicateException("User with email '" + email + "' already exists.");
         }
         if (staffRepository.existsByEmployeeId(employeeId)) {
-            throw new IllegalArgumentException("Staff with employee ID '" + employeeId + "' already exists.");
+            throw new ResourceDuplicateException("Staff with employee ID '" + employeeId + "' already exists.");
         }
 
         Role staffRole = roleCache.get("ROLE_TEACHER");
         if (staffRole == null) {
-            throw new RuntimeException("CRITICAL: Role 'ROLE_TEACHER' not found in database.");
+            throw new RelatedResourceNotFoundException("CRITICAL: Role 'ROLE_TEACHER' not found in database.");
         }
 
         // 4. --- Delegate creation to the (refactored) helper ---
-        // **ASSUMPTION**: You will create this new method in RegisterUserByRole
-        /*
-        registerUserByRole.registerTeacher(
-                // Common User/Profile data
-                email, DEFAULT_PASSWORD, staffRole,
-                firstName, lastName, middleName, dob, gender,
-                // Common Staff data
-                employeeId, joiningDate, jobTitle, department,
-                // Teacher-specific data
-                certifications, specializations, yearsOfExperience, educationLevel, stateLicenseNumber
-        );
-        */
-        log.warn("processTeacherRow called. Developer must implement call to registerUserByRole.registerTeacher(...)");
-        // For now, we call the old method to avoid breaking the compile,
-        // but this should be replaced by the call above.
         registerUserByRole.RegisterStaff(email, employeeId, DEFAULT_PASSWORD, staffRole,
                 firstName, lastName, middleName, dob, gender, joiningDate, jobTitle,
                 department, StaffType.TEACHER, row);
@@ -364,32 +347,18 @@ public class BulkImportServiceImpl implements BulkImportService {
 
         // 3. --- Validate Business Logic ---
         if (userRepository.existsByEmail(email)) {
-            throw new IllegalArgumentException("User with email '" + email + "' already exists.");
+            throw new ResourceDuplicateException("User with email '" + email + "' already exists.");
         }
         if (staffRepository.existsByEmployeeId(employeeId)) {
-            throw new IllegalArgumentException("Staff with employee ID '" + employeeId + "' already exists.");
+            throw new ResourceDuplicateException("Staff with employee ID '" + employeeId + "' already exists.");
         }
 
         Role staffRole = roleCache.get("ROLE_PRINCIPAL");
         if (staffRole == null) {
-            throw new RuntimeException("CRITICAL: Role 'ROLE_PRINCIPAL' not found in database.");
+            throw new RelatedResourceNotFoundException("CRITICAL: Role 'ROLE_PRINCIPAL' not found in database.");
         }
 
         // 4. --- Delegate creation to the (refactored) helper ---
-        // **ASSUMPTION**: You will create this new method in RegisterUserByRole
-        /*
-        registerUserByRole.registerPrincipal(
-                // Common User/Profile data
-                email, DEFAULT_PASSWORD, staffRole,
-                firstName, lastName, middleName, dob, gender,
-                // Common Staff data
-                employeeId, joiningDate, jobTitle, department,
-                // Principal-specific data
-                adminCertifications, schoolLevel
-        );
-        */
-        log.warn("processPrincipalRow called. Developer must implement call to registerUserByRole.registerPrincipal(...)");
-        // For now, we call the old method to avoid breaking the compile
         registerUserByRole.RegisterStaff(email, employeeId, DEFAULT_PASSWORD, staffRole,
                 firstName, lastName, middleName, dob, gender, joiningDate, jobTitle,
                 department, StaffType.PRINCIPAL, row);
@@ -411,38 +380,20 @@ public class BulkImportServiceImpl implements BulkImportService {
         String jobTitle = validationHelper.validateString(row[8], "jobTitle");
         Department department = validationHelper.parseEnum(Department.class, row[9], "department");
 
-        // 2. --- Parse Librarian-Specific Fields (Indices 18-19) ---
-        String libraryPermissions = row[18]; // Assuming JSON string or CSV
-        Boolean hasMlisDegree = validationHelper.parseBoolean(row[19], "mlisDegree");
-
         // 3. --- Validate Business Logic ---
         if (userRepository.existsByEmail(email)) {
-            throw new IllegalArgumentException("User with email '" + email + "' already exists.");
+            throw new ResourceDuplicateException("User with email '" + email + "' already exists.");
         }
         if (staffRepository.existsByEmployeeId(employeeId)) {
-            throw new IllegalArgumentException("Staff with employee ID '" + employeeId + "' already exists.");
+            throw new ResourceDuplicateException("Staff with employee ID '" + employeeId + "' already exists.");
         }
 
         Role staffRole = roleCache.get("ROLE_LIBRARIAN");
         if (staffRole == null) {
-            throw new RuntimeException("CRITICAL: Role 'ROLE_LIBRARIAN' not found in database.");
+            throw new RelatedResourceNotFoundException("CRITICAL: Role 'ROLE_LIBRARIAN' not found in database.");
         }
 
         // 4. --- Delegate creation to the (refactored) helper ---
-        // **ASSUMPTION**: You will create this new method in RegisterUserByRole
-        /*
-        registerUserByRole.registerLibrarian(
-                // Common User/Profile data
-                email, DEFAULT_PASSWORD, staffRole,
-                firstName, lastName, middleName, dob, gender,
-                // Common Staff data
-                employeeId, joiningDate, jobTitle, department,
-                // Librarian-specific data
-                libraryPermissions, hasMlisDegree
-        );
-        */
-        log.warn("processLibrarianRow called. Developer must implement call to registerUserByRole.registerLibrarian(...)");
-        // For now, we call the old method to avoid breaking the compile
         registerUserByRole.RegisterStaff(email, employeeId, DEFAULT_PASSWORD, staffRole,
                 firstName, lastName, middleName, dob, gender, joiningDate, jobTitle,
                 department, StaffType.LIBRARIAN, row);

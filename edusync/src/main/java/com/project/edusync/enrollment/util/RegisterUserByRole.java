@@ -256,7 +256,20 @@ public class RegisterUserByRole {
         log.info("Registering LibrarianDetails for staff ID: {}", staff.getId());
         LibrarianDetails details = new LibrarianDetails();
         details.setStaff(staff);
-        details.setMlisDegree(Boolean.parseBoolean(validationHelper.validateString(row[11], "mlisDegree")));
+        String mlisValue = row[19];
+
+        if (mlisValue == null || mlisValue.isBlank()) {
+            details.setMlisDegree(false); // Default to false if blank
+        } else {
+            // Only parse if not blank. Boolean.parseBoolean is safe.
+            details.setMlisDegree(Boolean.parseBoolean(mlisValue));
+        }
+        String permissionsValue = row[18];
+        if (permissionsValue != null && !permissionsValue.isBlank()) {
+            details.setLibrarySystemPermissions(List.of(permissionsValue.split(",")));
+        } else {
+            details.setLibrarySystemPermissions(Collections.emptyList()); // Set as empty list
+        }
         librarianDetailsRepository.save(details);
     }
 

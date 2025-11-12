@@ -1,5 +1,6 @@
 package com.project.edusync.enrollment.util;
 
+import com.project.edusync.common.exception.enrollment.DataParsingException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.apache.commons.lang3.StringUtils;
@@ -11,11 +12,10 @@ import java.util.regex.Pattern;
 
 /**
  * A stateless Spring component providing utility methods for validating and
- * parsing data from CSV rows during bulk import operations.
+ * parsing data from CSV rows.
  *
- * Each method is designed to be atomic and to throw a specific
- * {@link IllegalArgumentException} upon failure, which can be caught by the
- * calling service to generate a per-row error report.
+ * Each method now throws a specific {@link DataParsingException} upon failure,
+ * which is caught by the import service to generate a per-row error report.
  */
 @Component
 @Slf4j
@@ -46,33 +46,28 @@ public class CsvValidationHelper {
      */
     public String validateString(String value, String fieldName) {
         if (StringUtils.isBlank(value)) {
-            throw new IllegalArgumentException(fieldName + " cannot be null or empty.");
+            // USE: DataParsingException
+            throw new DataParsingException(fieldName + " cannot be null or empty.");
         }
         return value.trim();
     }
 
     /**
      * Validates a string as a proper email address.
-     *
-     * @param email The email string to validate.
-     * @return The original, trimmed email if valid.
-     * @throws IllegalArgumentException if the email is blank or has an invalid format.
+     * @throws DataParsingException if the email is blank or has an invalid format.
      */
     public String validateEmail(String email) {
         String validatedEmail = validateString(email, "email");
         if (!EMAIL_PATTERN.matcher(validatedEmail).matches()) {
-            throw new IllegalArgumentException("Invalid email format: '" + validatedEmail + "'.");
+            // USE: DataParsingException
+            throw new DataParsingException("Invalid email format: '" + validatedEmail + "'.");
         }
         return validatedEmail;
     }
 
     /**
      * Parses a string into a {@link LocalDate}.
-     *
-     * @param dateStr The date string from the CSV.
-     * @param fieldName The name of the field for error messages.
-     * @return The parsed {@link LocalDate}.
-     * @throws IllegalArgumentException if the string is blank or not a valid date.
+     * @throws DataParsingException if the string is blank or not a valid date.
      */
     public LocalDate parseDate(String dateStr, String fieldName) {
         String trimmedDate = validateString(dateStr, fieldName);
@@ -80,7 +75,8 @@ public class CsvValidationHelper {
             return LocalDate.parse(trimmedDate, DATE_FORMATTER);
         } catch (DateTimeParseException e) {
             log.warn("Failed to parse date string '{}' for field '{}'", trimmedDate, fieldName);
-            throw new IllegalArgumentException(
+            // USE: DataParsingException
+            throw new DataParsingException(
                     "Invalid date format for " + fieldName + ". Expected format: yyyy-MM-dd."
             );
         }
@@ -88,11 +84,7 @@ public class CsvValidationHelper {
 
     /**
      * Parses a string into an {@link Integer}.
-     *
-     * @param intStr The integer string from the CSV.
-     * @param fieldName The name of the field for error messages.
-     * @return The parsed {@link Integer}.
-     * @throws IllegalArgumentException if the string is blank or not a valid integer.
+     * @throws DataParsingException if the string is blank or not a valid integer.
      */
     public Integer parseInt(String intStr, String fieldName) {
         String trimmedInt = validateString(intStr, fieldName);
@@ -100,7 +92,8 @@ public class CsvValidationHelper {
             return Integer.parseInt(trimmedInt);
         } catch (NumberFormatException e) {
             log.warn("Failed to parse integer string '{}' for field '{}'", trimmedInt, fieldName);
-            throw new IllegalArgumentException(
+            // USE: DataParsingException
+            throw new DataParsingException(
                     fieldName + " is not a valid number: '" + trimmedInt + "'."
             );
         }
@@ -108,12 +101,7 @@ public class CsvValidationHelper {
 
     /**
      * Parses a string into a {@link Boolean}.
-     * Handles "true", "false" (case-insensitive), "1", "0", "yes", "no".
-     *
-     * @param boolStr The boolean string from the CSV.
-     * @param fieldName The name of the field for error messages.
-     * @return The parsed {@link Boolean}.
-     * @throws IllegalArgumentException if the string is blank or not a valid boolean.
+     * @throws DataParsingException if the string is blank or not a valid boolean.
      */
     public Boolean parseBoolean(String boolStr, String fieldName) {
         String validatedStr = validateString(boolStr, fieldName).toLowerCase();
@@ -125,31 +113,26 @@ public class CsvValidationHelper {
             return false;
         }
 
-        throw new IllegalArgumentException(
+        // USE: DataParsingException
+        throw new DataParsingException(
                 "Invalid boolean value for " + fieldName + ": '" + boolStr + "'. Expected true/false, 1/0, or yes/no."
         );
     }
 
     /**
      * A generic, case-insensitive parser for any Enum class.
-     *
-     * @param <E> The Enum type (e.g., Gender.class, StaffType.class).
-     * @param enumClass The .class of the Enum to parse into.
-     * @param value The string value from the CSV.
-     * @param fieldName The name of the field for error messages.
-     * @return The matching Enum constant.
-     * @throws IllegalArgumentException if the string is blank or no matching enum constant
+     * @throws DataParsingException if the string is blank or no matching enum constant
      * is found.
      */
     public <E extends Enum<E>> E parseEnum(Class<E> enumClass, String value, String fieldName) {
         String validatedValue = validateString(value, fieldName);
         try {
-            // This is the standard, case-insensitive way to find an enum
             return E.valueOf(enumClass, validatedValue.toUpperCase());
         } catch (IllegalArgumentException e) {
             log.warn("Failed to parse enum {} for field '{}' with value '{}'",
                     enumClass.getSimpleName(), fieldName, validatedValue);
-            throw new IllegalArgumentException(
+            // USE: DataParsingException
+            throw new DataParsingException(
                     "Invalid value for " + fieldName + ": '" + validatedValue + "'."
             );
         }

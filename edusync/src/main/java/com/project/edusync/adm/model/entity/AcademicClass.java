@@ -28,7 +28,7 @@ public class AcademicClass extends AuditableEntity {
 
     // The @Id (Long id) and 'uuid' are inherited from AuditableEntity.
 
-    @Column(name = "name", nullable = false, length = 100)
+    @Column(name = "name", nullable = false, length = 100, unique = true)
     private String name;
 
     @Column(name = "is_active")
