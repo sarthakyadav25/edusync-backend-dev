@@ -90,13 +90,9 @@ public class DataSeeder implements ApplicationRunner {
         createClassWithSections("UKG", Arrays.asList("A", "B"));
 
         List<String> standardSections = Arrays.asList("A", "B", "C");
-        for (int i = 1; i <= 10; i++) {
+        for (int i = 1; i <= 12; i++) {
             createClassWithSections("Class " + i, standardSections);
         }
-
-        List<String> streamSections = Arrays.asList("Science", "Commerce", "Arts");
-        createClassWithSections("Class 11", streamSections);
-        createClassWithSections("Class 12", streamSections);
 
         log.info("Saved {} classes and their corresponding sections.", classRepository.count());
     }
