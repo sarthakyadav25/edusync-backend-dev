@@ -19,21 +19,36 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.Arrays;
+import java.util.List;
+
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
-//@EnableMethodSecurity // this will enable @PreAuthorize
 public class WebSecurityConfig {
+
     @Value("${api.url}")
     private String apiVersionPath;
 
+    // Grouping whitelisted URLs for clarity
+    private static final String[] AUTH_WHITELIST = {
+            "/auth/**",
+            "/public/**" // For any future public-facing school data
+    };
+
     private static final String[] SWAGGER_WHITELIST = {
-            "/swagger-ui/**",
             "/v3/api-docs/**",
+            "/v3/api-docs.yaml",
+            "/swagger-ui/**",
             "/swagger-ui.html"
     };
 
+    private static final String[] MONITORING_WHITELIST = {
+            "/actuator/**" // Essential for health checks and metrics
+    };
+
     private final JWTFilter jwtFilter;
+
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration authenticationConfiguration) throws Exception {
         return authenticationConfiguration.getAuthenticationManager();
@@ -47,12 +62,13 @@ public class WebSecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.addAllowedOrigin("http://localhost:4200"); // Allow your frontend origin
-        configuration.addAllowedMethod("*"); // Allow all HTTP methods
-        configuration.addAllowedHeader("*"); // Allow all headers
-        configuration.setAllowCredentials(true); // Allow sending cookies/auth headers
+        // Recommendation: Move origins to application.yml for environment-specific configs
+        configuration.setAllowedOrigins(List.of("http://localhost:5173"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("*"));
+        configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration); // Apply to all paths
+        source.registerCorsConfiguration("/**", configuration);
         return source;
     }
 
@@ -62,17 +78,26 @@ public class WebSecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(auth -> auth
-                        // Permit all requests to your authentication endpoints
-                        .requestMatchers(apiVersionPath + "/auth/**", "/swagger-ui/**","/v3/api-docs/**","/swagger-ui.html")
-                        .permitAll()
+                        // 1. Public Auth Endpoints
+                        .requestMatchers(Arrays.stream(AUTH_WHITELIST)
+                                .map(path -> apiVersionPath + path)
+                                .toArray(String[]::new)).permitAll()
+
+                        // 2. API Documentation (Usually not prefixed by apiVersionPath)
+                        .requestMatchers(SWAGGER_WHITELIST).permitAll()
+
+                        // 3. Actuator Endpoints (Monitoring)
+                        .requestMatchers(MONITORING_WHITELIST).permitAll()
+
+                        // 4. Default: All other requests must be authenticated
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(customAuthenticationEntryPoint))
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
-                // Configuring stateless session management
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 );
+
         return http.build();
     }
 }
