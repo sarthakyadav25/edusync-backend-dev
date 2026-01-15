@@ -1,0 +1,272 @@
+package com.project.edusync.iam.service.impl;
+
+import com.project.edusync.adm.model.entity.Section;
+import com.project.edusync.adm.repository.SectionRepository;
+import com.project.edusync.common.exception.EdusyncException;
+import com.project.edusync.common.exception.ResourceNotFoundException;
+import com.project.edusync.common.exception.iam.UserAlreadyExistsException;
+import com.project.edusync.common.service.EmailService;
+import com.project.edusync.iam.model.dto.*;
+import com.project.edusync.iam.model.entity.Role;
+import com.project.edusync.iam.model.entity.User;
+import com.project.edusync.iam.repository.RoleRepository;
+import com.project.edusync.iam.repository.UserRepository;
+import com.project.edusync.iam.service.UserManagementService;
+import com.project.edusync.uis.mapper.*;
+import com.project.edusync.uis.model.entity.Staff;
+import com.project.edusync.uis.model.entity.Student;
+import com.project.edusync.uis.model.entity.UserProfile;
+import com.project.edusync.uis.model.entity.details.LibrarianDetails;
+import com.project.edusync.uis.model.entity.details.PrincipalDetails;
+import com.project.edusync.uis.model.entity.details.StudentDemographics;
+import com.project.edusync.uis.model.entity.details.TeacherDetails;
+import com.project.edusync.uis.model.entity.medical.StudentMedicalRecord;
+import com.project.edusync.uis.repository.*;
+import com.project.edusync.uis.repository.details.LibrarianDetailsRepository;
+import com.project.edusync.uis.repository.details.PrincipalDetailsRepository;
+import com.project.edusync.uis.repository.details.StudentDemographicsRepository;
+import com.project.edusync.uis.repository.details.TeacherDetailsRepository;
+import com.project.edusync.uis.repository.medical.StudentMedicalRecordRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
+import java.util.Collections;
+import java.util.UUID;
+
+/**
+ * Implementation of UserManagementService.
+ * <p>
+ * This class handles the transactional creation of users across multiple tables.
+ * It strictly uses the custom exception hierarchy (EdusyncException) for any failures.
+ * </p>
+ */
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class UserManagementServiceImpl implements UserManagementService {
+
+    // --- Core Identity ---
+    private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final EmailService emailService;
+    private final SectionRepository sectionRepository;
+
+    // --- UIS Core ---
+    private final UserProfileRepository userProfileRepository;
+    private final JsonMapper jsonMapper;
+
+    // --- Role Entities ---
+    private final StaffRepository staffRepository;
+    private final StudentRepository studentRepository;
+
+    // --- Extension Repositories ---
+    private final TeacherDetailsRepository teacherDetailsRepository;
+    private final PrincipalDetailsRepository principalDetailsRepository;
+    private final LibrarianDetailsRepository librarianDetailsRepository;
+    private final StudentDemographicsRepository studentDemographicsRepository;
+    private final StudentMedicalRecordRepository studentMedicalRecordRepository;
+
+    // --- Mappers ---
+    private final UserMapper userMapper;
+    private final UserProfileMapper userProfileMapper;
+    private final StudentMapper studentMapper;
+    private final StaffMapper staffMapper;
+    private final TeacherMapper teacherMapper;
+    private final PrincipalMapper principalMapper;
+    private final LibrarianMapper librarianMapper;
+
+    // =================================================================================
+    // 1. SCHOOL ADMIN
+    // =================================================================================
+    @Override
+    @Transactional
+    public User createSchoolAdmin(CreateUserRequestDTO request) {
+        log.info("Process started: Creating School Admin with username: {}", request.getUsername());
+        User user = createUserWithRole(request, "SCHOOL_ADMIN");
+        log.info("Success: School Admin created. User ID: {}", user.getId());
+        return user;
+    }
+
+    // =================================================================================
+    // 2. STUDENT (Comprehensive)
+    // =================================================================================
+    @Override
+    @Transactional
+    public User createStudent(CreateStudentRequestDTO request) {
+        log.info("Process started: Enrolling new Student: {}", request.getUsername());
+
+        // 1. Create Base User & Profile (Identity Layer)
+        User user = createUserWithRole(request, "STUDENT");
+
+        // 2. Fetch Profile to link relationships
+        UserProfile profile = userProfileRepository.findByUser(user)
+                .orElseThrow(() -> new EdusyncException("System Error: Profile creation verification failed for user " + user.getUsername(), HttpStatus.INTERNAL_SERVER_ERROR));
+
+        // 2. Fetch the Section
+        Section section = sectionRepository.findById(request.getSectionId())
+                .orElseThrow(() -> new ResourceNotFoundException("Section", "id", request.getSectionId()));
+        // 3. Create Core Student Entity
+        Student student = studentMapper.toStudentEntity(request);
+        student.setUserProfile(profile);
+        student.setSection(section);
+
+        // Auto-generate ID if not provided (Safety net)
+        if (student.getEnrollmentNumber() == null) {
+            String generatedId = generateEnrollmentId();
+            log.debug("Auto-generating Enrollment Number: {}", generatedId);
+            student.setEnrollmentNumber(generatedId);
+        }
+        // Check for duplicate enrollment number
+        if (studentRepository.existsByEnrollmentNumber(student.getEnrollmentNumber())) {
+            throw new UserAlreadyExistsException("Student with enrollment number " + student.getEnrollmentNumber() + " already exists.");
+        }
+
+        if (student.getEnrollmentDate() == null) {
+            student.setEnrollmentDate(LocalDate.now());
+        }
+
+        Student savedStudent = studentRepository.save(student);
+        log.debug("Core Student record saved. ID: {}", savedStudent.getId());
+        log.info("Success: Comprehensive Student enrollment complete. Enrollment #: {}", savedStudent.getEnrollmentNumber());
+        return user;
+    }
+
+    // =================================================================================
+    // 3. STAFF
+    // =================================================================================
+
+    @Override
+    @Transactional
+    public User createTeacher(CreateTeacherRequestDTO request) {
+        log.info("Process started: Hiring Teacher: {}", request.getUsername());
+
+        // 1. Create User -> Profile -> Staff
+        Staff staff = createBaseStaff(request);
+
+        // 2. Create Teacher Details Extension
+        TeacherDetails details = teacherMapper.toEntity(request);
+        details.setStaff(staff); // Link via @MapsId
+
+        teacherDetailsRepository.save(details);
+        log.info("Success: Teacher created with ID: {}", staff.getId());
+
+        return staff.getUserProfile().getUser();
+    }
+
+    @Override
+    @Transactional
+    public User createPrincipal(CreatePrincipalRequestDTO request) {
+        log.info("Process started: Appointing Principal: {}", request.getUsername());
+
+        Staff staff = createBaseStaff(request);
+
+        PrincipalDetails details = principalMapper.toEntity(request);
+        details.setStaff(staff);
+
+        principalDetailsRepository.save(details);
+        log.info("Success: Principal created with ID: {}", staff.getId());
+
+        return staff.getUserProfile().getUser();
+    }
+
+    @Override
+    @Transactional
+    public User createLibrarian(CreateLibrarianRequestDTO request) {
+        log.info("Process started: Hiring Librarian: {}", request.getUsername());
+
+        Staff staff = createBaseStaff(request);
+
+        LibrarianDetails details = librarianMapper.toEntity(request);
+        details.setStaff(staff);
+
+        librarianDetailsRepository.save(details);
+        log.info("Success: Librarian created with ID: {}", staff.getId());
+
+        return staff.getUserProfile().getUser();
+    }
+
+    // =================================================================================
+    // INTERNAL HELPERS
+    // =================================================================================
+
+    /**
+     * Shared logic to create the Identity (User), Profile, and Base Staff record.
+     * Prevents code duplication across different staff types.
+     */
+    private Staff createBaseStaff(BaseStaffRequestDTO request) {
+        // A. Identity & Profile
+        User user = createUserWithRole(request, "STAFF");
+
+        UserProfile profile = userProfileRepository.findByUser(user)
+                .orElseThrow(() -> new EdusyncException("System Error: Profile creation verification failed.", HttpStatus.INTERNAL_SERVER_ERROR));
+
+        // B. Base Staff Entity
+        Staff staff = staffMapper.toEntity(request);
+        staff.setUserProfile(profile);
+
+        // Note: Staff ID is generated here
+        return staffRepository.save(staff);
+    }
+
+    /**
+     * Core logic to create the User and UserProfile.
+     * Handles Validation, Password Hashing, and Role Assignment.
+     */
+    private User createUserWithRole(CreateUserRequestDTO request, String roleName) {
+        // 1. Check for Duplicate Username
+        if (userRepository.findByUsername(request.getUsername()).isPresent()) {
+            log.warn("Registration failed: Username '{}' already exists.", request.getUsername());
+            throw new UserAlreadyExistsException("Username '" + request.getUsername() + "' is already taken.");
+        }
+        // 1b. Check for Duplicate Email
+        // Assuming your User repository has a method for this, or you handle it via DataIntegrityViolationException
+        // We will do a manual check for cleaner error messages
+         if (userRepository.existsByEmail(request.getEmail())) {
+             throw new DataIntegrityViolationException("Email '" + request.getEmail() + "' already exists.");
+         }
+
+        // 2. Validate Role Existence
+        Role role = roleRepository.findByName("ROLE_"+roleName)
+                .orElseThrow(() -> {
+                    log.error("Configuration Error: Role '{}' not found in database.", roleName);
+                    return new ResourceNotFoundException("Role", "name", roleName);
+                });
+
+        // 3. Create User Entity
+        User user = userMapper.toEntity(request);
+
+        // Secure Password Generation
+        String rawPassword = request.getInitialPassword() != null ?
+                request.getInitialPassword() :
+                request.getUsername();
+        user.setPassword(passwordEncoder.encode(rawPassword));
+        user.setActive(true);
+        user.setRoles(Collections.singleton(role));
+
+        User savedUser = userRepository.save(user);
+        log.debug("User identity created. ID: {}", savedUser.getId());
+
+        // 4. Create Profile Entity
+        UserProfile profile = userProfileMapper.toEntity(request);
+        profile.setUser(savedUser); // Foreign Key Link
+
+        userProfileRepository.save(profile);
+        log.debug("User profile created. Profile ID: {}", profile.getId());
+
+        // 5. Send Welcome Email (Async)
+        // emailService.sendWelcomeEmail(savedUser, rawPassword);
+
+        return savedUser;
+    }
+
+    private String generateEnrollmentId() {
+        return "STU-" + LocalDate.now().getYear() + "-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+    }
+}
