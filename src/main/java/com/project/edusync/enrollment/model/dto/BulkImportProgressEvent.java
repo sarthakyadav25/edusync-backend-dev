@@ -55,6 +55,12 @@ public class BulkImportProgressEvent {
     /** Error message if the row failed; null on success. */
     private String errorMessage;
 
+    /** Error message list for final summary events. */
+    private List<String> errorMessages;
+
+    /** Optional computed room capacity used by room import success events. */
+    private Integer totalCapacity;
+
     /** Running success count at the time of this event. */
     private int successCount;
 

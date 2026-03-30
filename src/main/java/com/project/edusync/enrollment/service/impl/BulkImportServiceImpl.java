@@ -3,15 +3,21 @@ package com.project.edusync.enrollment.service.impl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.opencsv.CSVReader;
 import com.opencsv.exceptions.CsvValidationException;
+import com.project.edusync.adm.model.entity.Building;
+import com.project.edusync.adm.model.entity.Room;
 import com.project.edusync.adm.model.entity.Section;
+import com.project.edusync.adm.repository.BuildingRepository;
+import com.project.edusync.adm.repository.RoomRepository;
 import com.project.edusync.adm.repository.SectionRepository;
 import com.project.edusync.common.exception.enrollment.BulkImportException;
+import com.project.edusync.common.exception.enrollment.DataParsingException;
 import com.project.edusync.common.exception.enrollment.InvalidCsvHeaderException;
 import com.project.edusync.common.exception.enrollment.RelatedResourceNotFoundException;
 import com.project.edusync.common.exception.enrollment.ResourceDuplicateException;
 import com.project.edusync.enrollment.model.dto.BulkImportGuardianInputDTO;
 import com.project.edusync.enrollment.model.dto.BulkImportProgressEvent;
 import com.project.edusync.enrollment.model.dto.BulkImportReportDTO;
+import com.project.edusync.enrollment.model.dto.BulkRoomImportReportDTO;
 import com.project.edusync.enrollment.service.BulkImportService;
 import com.project.edusync.enrollment.service.SseEmitterRegistry;
 import com.project.edusync.enrollment.util.CsvValidationHelper;
@@ -32,6 +38,7 @@ import com.project.edusync.uis.repository.StudentRepository;
 import com.project.edusync.uis.repository.UserProfileRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -47,10 +54,12 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 /**
@@ -107,6 +116,19 @@ public class BulkImportServiceImpl implements BulkImportService {
             "relationshipType", "occupation", "employer", "primaryContact", "canPickup", "financialContact", "canViewGrades"
     );
 
+    private static final List<String> ROOM_HEADER = Arrays.asList(
+            "name", "roomType", "seatingType", "rowCount", "columnsPerRow", "seatsPerUnit", "floorNumber",
+            "building", "hasProjector", "hasAC", "hasWhiteboard", "isAccessible", "otherAmenities"
+    );
+
+    private static final Set<String> VALID_ROOM_TYPES = Set.of(
+            "CLASSROOM", "LABORATORY", "COMPUTER_LAB", "LIBRARY", "OTHER"
+    );
+
+    private static final Set<String> VALID_SEATING_TYPES = Set.of(
+            "BENCH", "DESK_CHAIR", "WORKSTATION", "TERMINAL"
+    );
+
 
     @Value("${edusync.bulk-import.default-password:Welcome@123}")
     private String DEFAULT_PASSWORD;
@@ -120,6 +142,8 @@ public class BulkImportServiceImpl implements BulkImportService {
     private final UserProfileRepository userProfileRepository;
     private final StudentGuardianRelationshipRepository studentGuardianRelationshipRepository;
     private final SectionRepository sectionRepository;
+    private final RoomRepository roomRepository;
+    private final BuildingRepository buildingRepository;
     private final CsvValidationHelper validationHelper;
     private final RegisterUserByRole registerUserByRole;
     private final SseEmitterRegistry sseEmitterRegistry;
@@ -544,6 +568,212 @@ public class BulkImportServiceImpl implements BulkImportService {
         log.info("[StudentsWithGuardians] Import completed. totalRows={}, successCount={}, failureCount={}",
                 rowNumber - 1, successCount, failureCount);
         return report;
+    }
+
+    @Override
+    public BulkRoomImportReportDTO importRooms(MultipartFile file, String sessionId) throws IOException {
+        int rowNumber = 1;
+        int successCount = 0;
+        int failureCount = 0;
+        Set<String> errorMessages = new LinkedHashSet<>();
+
+        try (Reader reader = new InputStreamReader(file.getInputStream());
+             CSVReader csvReader = new CSVReader(reader)) {
+
+            String[] header = csvReader.readNext();
+            if (header == null) {
+                throw new InvalidCsvHeaderException("File is empty or header is missing.");
+            }
+            List<String> actualHeader = Arrays.asList(header);
+            if (!actualHeader.equals(ROOM_HEADER)) {
+                throw new InvalidCsvHeaderException(
+                        String.format("Invalid CSV header. Expected: %s, Found: %s", ROOM_HEADER, actualHeader)
+                );
+            }
+
+            String[] row;
+            while ((row = csvReader.readNext()) != null) {
+                rowNumber++;
+                String identifier = row.length > 0 && row[0] != null && !row[0].isBlank()
+                        ? row[0].trim()
+                        : "row-" + rowNumber;
+
+                try {
+                    Integer capacity = processRoomRow(row);
+                    successCount++;
+
+                    emitEvent(sessionId, BulkImportProgressEvent.builder()
+                            .rowNumber(rowNumber - 1)
+                            .eventType("ROW_SUCCESS")
+                            .identifier(identifier)
+                            .userType("rooms")
+                            .totalCapacity(capacity)
+                            .successCount(successCount)
+                            .failureCount(failureCount)
+                            .build());
+                } catch (BulkImportException e) {
+                    failureCount++;
+                    String rowError = String.format("Row %d: %s", rowNumber, e.getMessage());
+                    errorMessages.add(rowError);
+
+                    emitEvent(sessionId, BulkImportProgressEvent.builder()
+                            .rowNumber(rowNumber - 1)
+                            .eventType("ROW_FAILURE")
+                            .identifier(identifier)
+                            .userType("rooms")
+                            .errorMessage(e.getMessage())
+                            .successCount(successCount)
+                            .failureCount(failureCount)
+                            .build());
+                } catch (DataIntegrityViolationException e) {
+                    failureCount++;
+                    String message = "Database constraint violation while saving room.";
+                    String rowError = String.format("Row %d: %s", rowNumber, message);
+                    errorMessages.add(rowError);
+
+                    emitEvent(sessionId, BulkImportProgressEvent.builder()
+                            .rowNumber(rowNumber - 1)
+                            .eventType("ROW_FAILURE")
+                            .identifier(identifier)
+                            .userType("rooms")
+                            .errorMessage(message)
+                            .successCount(successCount)
+                            .failureCount(failureCount)
+                            .build());
+                } catch (Exception e) {
+                    failureCount++;
+                    String message = "Unexpected error while processing room row.";
+                    String rowError = String.format("Row %d: %s", rowNumber, message);
+                    errorMessages.add(rowError);
+                    log.error("Unexpected room import error at row {}", rowNumber, e);
+
+                    emitEvent(sessionId, BulkImportProgressEvent.builder()
+                            .rowNumber(rowNumber - 1)
+                            .eventType("ROW_FAILURE")
+                            .identifier(identifier)
+                            .userType("rooms")
+                            .errorMessage(message)
+                            .successCount(successCount)
+                            .failureCount(failureCount)
+                            .build());
+                }
+            }
+        } catch (CsvValidationException | BulkImportException e) {
+            String fatal = "Fatal Error: " + e.getMessage();
+            errorMessages.add(fatal);
+
+            emitEvent(sessionId, BulkImportProgressEvent.builder()
+                    .eventType("JOB_FAILED")
+                    .userType("rooms")
+                    .errorMessage(fatal)
+                    .successCount(0)
+                    .failureCount(0)
+                    .build());
+            sseEmitterRegistry.complete(sessionId);
+            return new BulkRoomImportReportDTO("FAILED", 0, 0, 0, errorMessages.stream().toList());
+        }
+
+        int totalRows = rowNumber - 1;
+        String status = successCount == 0
+                ? "FAILED"
+                : (failureCount == 0 ? "SUCCESS" : "PARTIAL");
+
+        emitEvent(sessionId, BulkImportProgressEvent.builder()
+                .eventType("JOB_COMPLETE")
+                .userType("rooms")
+                .totalRows(totalRows)
+                .successCount(successCount)
+                .failureCount(failureCount)
+                .errorMessages(errorMessages.stream().toList())
+                .build());
+        sseEmitterRegistry.complete(sessionId);
+
+        return new BulkRoomImportReportDTO(
+                status,
+                totalRows,
+                successCount,
+                failureCount,
+                errorMessages.stream().toList()
+        );
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public Integer processRoomRow(String[] row) {
+        String name = validationHelper.validateString(getRequiredColumn(row, 0, "name"), "name");
+        String roomType = validationHelper.validateString(getRequiredColumn(row, 1, "roomType"), "roomType").toUpperCase(Locale.ROOT);
+        String seatingType = validationHelper.validateString(getRequiredColumn(row, 2, "seatingType"), "seatingType").toUpperCase(Locale.ROOT);
+
+        if (!VALID_ROOM_TYPES.contains(roomType)) {
+            throw new BulkImportException("Invalid roomType '" + roomType + "'.", HttpStatus.BAD_REQUEST);
+        }
+        if (!VALID_SEATING_TYPES.contains(seatingType)) {
+            throw new BulkImportException("Invalid seatingType '" + seatingType + "'.", HttpStatus.BAD_REQUEST);
+        }
+
+        Integer rowCount = parseMinInteger(row, 3, "rowCount", 1);
+        Integer columnsPerRow = parseMinInteger(row, 4, "columnsPerRow", 1);
+        Integer seatsPerUnit = parseMinInteger(row, 5, "seatsPerUnit", 1);
+        Integer floorNumber = parseMinInteger(row, 6, "floorNumber", 0);
+        String buildingName = validationHelper.validateString(getRequiredColumn(row, 7, "building"), "building");
+
+        Building building = buildingRepository.findByNameIgnoreCase(buildingName)
+                .orElseThrow(() -> new RelatedResourceNotFoundException("Building '" + buildingName + "' not found"));
+
+        if (roomRepository.existsByNameIgnoreCase(name)) {
+            throw new ResourceDuplicateException("Duplicate room name '" + name + "'");
+        }
+
+        Room room = new Room();
+        room.setName(name);
+        room.setRoomType(roomType);
+        room.setSeatingType(seatingType);
+        room.setRowCount(rowCount);
+        room.setColumnsPerRow(columnsPerRow);
+        room.setSeatsPerUnit(seatsPerUnit);
+        room.setFloorNumber(floorNumber);
+        room.setBuilding(building);
+        room.setHasProjector(parseOptionalBoolean(row, 8, false, "hasProjector"));
+        room.setHasAC(parseOptionalBoolean(row, 9, false, "hasAC"));
+        room.setHasWhiteboard(parseOptionalBoolean(row, 10, true, "hasWhiteboard"));
+        room.setIsAccessible(parseOptionalBoolean(row, 11, false, "isAccessible"));
+        room.setOtherAmenities(parseOptionalString(row, 12, "otherAmenities"));
+        room.setIsActive(true);
+
+        Room saved = roomRepository.save(room);
+        return saved.getTotalCapacity();
+    }
+
+    private String getRequiredColumn(String[] row, int index, String fieldName) {
+        if (index >= row.length) {
+            throw new BulkImportException("Missing required column '" + fieldName + "'.", HttpStatus.BAD_REQUEST);
+        }
+        return row[index];
+    }
+
+    private Integer parseMinInteger(String[] row, int index, String fieldName, int minValue) {
+        Integer value = validationHelper.parseInt(getRequiredColumn(row, index, fieldName), fieldName);
+        if (value < minValue) {
+            throw new BulkImportException(fieldName + " must be >= " + minValue + ".", HttpStatus.BAD_REQUEST);
+        }
+        return value;
+    }
+
+    private Boolean parseOptionalBoolean(String[] row, int index, boolean defaultValue, String fieldName) {
+        if (index >= row.length || row[index] == null || row[index].isBlank()) {
+            return defaultValue;
+        }
+        return validationHelper.parseBoolean(row[index], fieldName);
+    }
+
+    private String parseOptionalString(String[] row, int index, String fieldName) {
+        if (index >= row.length || row[index] == null || row[index].isBlank()) {
+            return null;
+        }
+        String value = row[index].trim();
+        if ("otherAmenities".equals(fieldName) && value.length() > 500) {
+            throw new DataParsingException("otherAmenities must be at most 500 characters.");
+        }
+        return value;
     }
 
     private Map<String, List<BulkImportGuardianInputDTO>> parseGuardiansFile(MultipartFile guardiansFile) throws IOException {

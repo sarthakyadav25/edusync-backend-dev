@@ -1,6 +1,7 @@
 package com.project.edusync.enrollment.service;
 
 import com.project.edusync.enrollment.model.dto.BulkImportReportDTO;
+import com.project.edusync.enrollment.model.dto.BulkRoomImportReportDTO;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -28,4 +29,6 @@ public interface BulkImportService {
     BulkImportReportDTO importStudentsWithGuardians(MultipartFile studentsFile,
                                                     MultipartFile guardiansFile,
                                                     String sessionId) throws IOException;
+
+    BulkRoomImportReportDTO importRooms(MultipartFile file, String sessionId) throws IOException;
 }

@@ -59,6 +59,9 @@ public interface ScheduleRepository extends JpaRepository<Schedule, Long> {
     @Query("SELECT CASE WHEN COUNT(s) > 0 THEN true ELSE false END FROM Schedule s WHERE s.uuid = :scheduleId AND s.isActive = true")
     boolean existsActiveById(UUID scheduleId);
 
+    @Query("SELECT CASE WHEN COUNT(s) > 0 THEN true ELSE false END FROM Schedule s WHERE s.room.uuid = :roomId AND s.isActive = true")
+    boolean existsActiveByRoomUuid(UUID roomId);
+
     @Transactional
     @Modifying
     @Query("UPDATE Schedule s SET s.isActive = false WHERE s.uuid = :scheduleId")

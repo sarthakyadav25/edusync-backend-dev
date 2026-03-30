@@ -4,6 +4,7 @@ import com.project.edusync.adm.exception.AlreadyBookedException;
 import com.project.edusync.adm.exception.InvalidRequestException;
 import com.project.edusync.adm.exception.ResourceNotFoundException;
 import com.project.edusync.adm.model.dto.request.ScheduleRequestDto;
+import com.project.edusync.adm.model.dto.response.RoomBasicResponseDto;
 import com.project.edusync.adm.model.dto.response.ScheduleResponseDto;
 import com.project.edusync.adm.model.dto.response.TimetableOverviewResponseDto;
 import com.project.edusync.adm.model.entity.*;
@@ -84,8 +85,8 @@ public class ScheduleServiceImpl implements ScheduleService {
         log.info("Attempting to create a new schedule entry for section {} at timeslot {}",
                 requestDto.getSectionId(), requestDto.getTimeslotId());
 
-        // 1. Assign room if missing
-        assignRoomIfMissing(requestDto, Collections.emptySet());
+        // 1. Inherit section default room when request does not send roomId
+        assignRoomIfMissing(requestDto);
 
         // 2. Validate for conflicts
         validateScheduleConflicts(requestDto, null, null);
@@ -121,8 +122,8 @@ public class ScheduleServiceImpl implements ScheduleService {
 
         UUID previousSectionId = existingSchedule.getSection().getUuid();
 
-        // 1. Assign room if missing
-        assignRoomIfMissing(requestDto, Collections.emptySet());
+        // 1. Inherit section default room when request does not send roomId
+        assignRoomIfMissing(requestDto);
 
         // 2. Validate for conflicts (excluding the current scheduleId)
         validateScheduleConflicts(requestDto, scheduleId, null);
@@ -213,22 +214,14 @@ public class ScheduleServiceImpl implements ScheduleService {
         Map<UUID, Room> roomsMap = new HashMap<>();
         Map<UUID, Timeslot> timeslotsMap = new HashMap<>();
 
-        // Keep track of which rooms we've already "assigned" within this bulk payload (internal consistency)
-        // Key: timeslotId, Value: Set of roomIds assigned for that timeslot in THIS payload
-        Map<UUID, Set<UUID>> internallyAssignedRoomsByTimeslot = new HashMap<>();
-
         // 1. Process each request to assign rooms if missing and validate
         for (ScheduleRequestDto dto : schedules) {
             if (!sectionId.equals(dto.getSectionId())) {
                 throw new InvalidRequestException("Each schedule row must use the same sectionId as the path parameter.");
             }
 
-            // If roomId is missing, try to auto-assign an available room
-            Set<UUID> takenInternally = internallyAssignedRoomsByTimeslot.getOrDefault(dto.getTimeslotId(), Collections.emptySet());
-            assignRoomIfMissing(dto, takenInternally);
-
-            // Record assignment internally for this payload
-            internallyAssignedRoomsByTimeslot.computeIfAbsent(dto.getTimeslotId(), k -> new HashSet<>()).add(dto.getRoomId());
+            // If roomId is missing, inherit the section default room
+            assignRoomIfMissing(dto);
 
             // 2. Validate conflicts against OTHER sections
             validateScheduleConflicts(dto, null, sectionId);
@@ -355,24 +348,24 @@ public class ScheduleServiceImpl implements ScheduleService {
         };
     }
 
-    private void assignRoomIfMissing(ScheduleRequestDto dto, Set<UUID> excludeRoomIds) {
+    private void assignRoomIfMissing(ScheduleRequestDto dto) {
         if (dto.getRoomId() != null) return;
 
-        Timeslot timeslot = findTimeslotById(dto.getTimeslotId());
-        log.info("Room ID missing for timeslot {}. Finding available room...", timeslot.getSlotLabel());
+        Section section = findSectionById(dto.getSectionId());
+        Room defaultRoom = section.getDefaultRoom();
+        if (defaultRoom == null) {
+            throw new InvalidRequestException(
+                    "Room ID is required because section '" + section.getSectionName() + "' has no default room configured."
+            );
+        }
+        if (!Boolean.TRUE.equals(defaultRoom.getIsActive())) {
+            throw new InvalidRequestException(
+                    "Section default room '" + defaultRoom.getName() + "' is inactive. Please select another room."
+            );
+        }
 
-        List<Room> availableRooms = roomRepository.findAvailableRooms(timeslot.getUuid());
-        Room selectedRoom = availableRooms.stream()
-                .filter(r -> !excludeRoomIds.contains(r.getUuid()))
-                .findFirst()
-                .orElseThrow(() -> new AlreadyBookedException(
-                        String.format("No rooms available for the %s slot on %s.", 
-                                timeslot.getSlotLabel() != null ? timeslot.getSlotLabel() : timeslot.getStartTime(),
-                                formatDayOfWeek(timeslot))
-                ));
-
-        dto.setRoomId(selectedRoom.getUuid());
-        log.info("Smart auto-assigned room '{}' to timeslot {}", selectedRoom.getName(), timeslot.getSlotLabel());
+        dto.setRoomId(defaultRoom.getUuid());
+        log.info("Inherited section default room '{}' for section '{}'", defaultRoom.getName(), section.getSectionName());
     }
 
     private void validateBulkPayloadInternal(List<ScheduleRequestDto> schedules) {
@@ -482,6 +475,12 @@ public class ScheduleServiceImpl implements ScheduleService {
                         .uuid(entity.getSection().getUuid())
                         .sectionName(entity.getSection().getSectionName())
                         .className(entity.getSection().getAcademicClass().getName())
+                        .defaultRoom(entity.getSection().getDefaultRoom() == null
+                                ? null
+                                : new RoomBasicResponseDto(
+                                        entity.getSection().getDefaultRoom().getUuid(),
+                                        entity.getSection().getDefaultRoom().getName()
+                                ))
                         .build())
                 .subject(ScheduleResponseDto.NestedSubjectResponseDto.builder()
                         .uuid(entity.getSubject().getUuid())
@@ -496,6 +495,7 @@ public class ScheduleServiceImpl implements ScheduleService {
                         .uuid(entity.getRoom().getUuid())
                         .name(entity.getRoom().getName())
                         .roomType(entity.getRoom().getRoomType())
+                        .totalCapacity(entity.getRoom().getTotalCapacity())
                         .build())
                 .timeslot(ScheduleResponseDto.NestedTimeslotResponseDto.builder()
                         .uuid(entity.getTimeslot().getUuid())

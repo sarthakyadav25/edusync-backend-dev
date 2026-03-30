@@ -191,6 +191,8 @@ public class AutoScheduleServiceImpl implements AutoScheduleService {
                 .room(ScheduleResponseDto.NestedRoomResponseDto.builder()
                         .uuid(gene.room.getUuid())
                         .name(gene.room.getName())
+                        .roomType(gene.room.getRoomType())
+                        .totalCapacity(gene.room.getTotalCapacity())
                         .build())
                 .build();
     }
