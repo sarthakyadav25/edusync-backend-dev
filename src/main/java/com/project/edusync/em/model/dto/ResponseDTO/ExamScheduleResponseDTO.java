@@ -37,4 +37,5 @@ public class ExamScheduleResponseDTO {
     private BigDecimal maxMarks;
     private BigDecimal passingMarks;
     private String roomNumber;
+    private Long totalStudents;
 }

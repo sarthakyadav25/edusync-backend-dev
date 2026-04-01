@@ -13,6 +13,7 @@ import com.project.edusync.em.model.entity.ExamSchedule;
 import com.project.edusync.em.model.repository.ExamRepository;
 import com.project.edusync.em.model.repository.ExamScheduleRepository;
 import com.project.edusync.em.model.service.ExamScheduleService;
+import com.project.edusync.uis.repository.StudentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,7 @@ public class ExamScheduleServiceImpl implements ExamScheduleService {
     private final AcademicClassRepository academicClassRepository;
     private final SubjectRepository subjectRepository;
     private final com.project.edusync.adm.repository.TimeslotRepository timeslotRepository;
+    private final StudentRepository studentRepository;
 
     @Override
     public ExamScheduleResponseDTO createSchedule(UUID examUuid, ExamScheduleRequestDTO requestDTO) {
@@ -130,11 +132,17 @@ public class ExamScheduleServiceImpl implements ExamScheduleService {
     }
 
     private ExamScheduleResponseDTO mapEntityToResponse(ExamSchedule entity) {
+        long totalStudents = entity.getSection() != null
+                ? studentRepository.countBySectionId(entity.getSection().getId())
+                : studentRepository.countBySection_AcademicClass_Id(entity.getAcademicClass().getId());
+
         return ExamScheduleResponseDTO.builder()
                 .scheduleId(entity.getId())
                 .examUuid(entity.getExam().getUuid())
                 .classId(entity.getAcademicClass().getUuid())
                 .className(entity.getAcademicClass().getName())
+                .sectionId(entity.getSection() != null ? entity.getSection().getUuid() : null)
+                .sectionName(entity.getSection() != null ? entity.getSection().getSectionName() : null)
                 .subjectId(entity.getSubject().getUuid())
                 .subjectName(entity.getSubject().getName())
                 .examDate(entity.getExamDate())
@@ -142,7 +150,7 @@ public class ExamScheduleServiceImpl implements ExamScheduleService {
                 .endTime(entity.getTimeslot() != null ? entity.getTimeslot().getEndTime() : null)
                 .maxMarks(java.math.BigDecimal.valueOf(entity.getMaxMarks()))
                 .passingMarks(java.math.BigDecimal.valueOf(entity.getMaxMarks())) // TODO: replace with actual field if available
-                .roomNumber(null) // TODO: replace with actual field if available
+                .totalStudents(totalStudents)
                 .build();
     }
 }

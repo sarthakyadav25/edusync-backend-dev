@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
+import java.util.List;
 
 public interface StudentRepository extends JpaRepository<Student, Long> {
 
@@ -61,4 +62,12 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
     Optional<Student> findByUuid(java.util.UUID uuid);
 
     Optional<Student> findByUserProfile_User_Id(Long userId);
+
+    List<Student> findBySectionId(Long sectionId);
+
+    List<Student> findBySection_AcademicClass_Id(Long classId);
+
+    long countBySectionId(Long sectionId);
+
+    long countBySection_AcademicClass_Id(Long classId);
 }

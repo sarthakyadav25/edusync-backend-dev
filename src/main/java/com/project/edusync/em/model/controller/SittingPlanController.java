@@ -1,6 +1,7 @@
 package com.project.edusync.em.model.controller;
 
 import com.project.edusync.em.model.dto.request.SittingPlanRequestDTO;
+import com.project.edusync.em.model.dto.request.AutoAllocationRequestDTO;
 import com.project.edusync.em.model.dto.response.SittingPlanResponseDTO;
 import com.project.edusync.em.model.service.SittingPlanService;
 import lombok.RequiredArgsConstructor;
@@ -10,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/sitting-plans")
+@RequestMapping("${api.url}/auth/examination/sitting-plans")
 @RequiredArgsConstructor
 public class SittingPlanController {
     private final SittingPlanService sittingPlanService;
@@ -18,6 +19,11 @@ public class SittingPlanController {
     @PostMapping
     public ResponseEntity<SittingPlanResponseDTO> assignSeat(@Validated @RequestBody SittingPlanRequestDTO dto) {
         return ResponseEntity.ok(sittingPlanService.assignSeat(dto));
+    }
+
+    @PostMapping("/auto-allocate")
+    public ResponseEntity<List<SittingPlanResponseDTO>> autoAllocate(@Validated @RequestBody AutoAllocationRequestDTO dto) {
+        return ResponseEntity.ok(sittingPlanService.bulkAutoAllocate(dto));
     }
 
     @GetMapping("/exam/{examScheduleId}")

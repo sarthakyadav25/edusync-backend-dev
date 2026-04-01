@@ -31,16 +31,16 @@ public class InvigilationService {
         }
         ExamSchedule examSchedule = examScheduleRepository.findById(dto.getExamScheduleId())
                 .orElseThrow(() -> new ResourceNotFoundException("ExamSchedule", "id", dto.getExamScheduleId()));
-        Staff staff = staffRepository.findById(dto.getStaffId())
-                .orElseThrow(() -> new ResourceNotFoundException("Staff", "id", dto.getStaffId()));
-        if (invigilationRepository.existsByExamScheduleIdAndStaffId(dto.getExamScheduleId(), dto.getStaffId())) {
+        Staff staff = staffRepository.findByUuid(dto.getStaffId())
+                .orElseThrow(() -> new ResourceNotFoundException("Staff", "uuid", dto.getStaffId().toString()));
+        if (invigilationRepository.existsByExamScheduleIdAndStaffId(dto.getExamScheduleId(), staff.getId())) {
             throw new BadRequestException("Staff already assigned to this exam");
         }
         if (dto.getRole() == InvigilationRole.PRIMARY && invigilationRepository.existsByExamScheduleIdAndRole(dto.getExamScheduleId(), InvigilationRole.PRIMARY)) {
             throw new BadRequestException("Only one PRIMARY invigilator allowed per exam");
         }
         Long timeslotId = examSchedule.getTimeslot().getId();
-        boolean timeslotConflict = !invigilationRepository.findByStaffIdAndExamSchedule_TimeslotId(dto.getStaffId(), timeslotId).isEmpty();
+        boolean timeslotConflict = !invigilationRepository.findByStaffIdAndExamSchedule_TimeslotId(staff.getId(), timeslotId).isEmpty();
         if (timeslotConflict) {
             throw new BadRequestException("Staff is already assigned to another exam in the same timeslot");
         }
