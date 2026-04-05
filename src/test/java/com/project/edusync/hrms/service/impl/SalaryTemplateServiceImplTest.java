@@ -21,10 +21,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -50,9 +53,10 @@ class SalaryTemplateServiceImplTest {
                 null,
                 null,
                 "2026-2027",
+                null,
                 List.of(
-                        new TemplateComponentInputDTO(1L, new BigDecimal("10000")),
-                        new TemplateComponentInputDTO(1L, new BigDecimal("12000"))
+                        new TemplateComponentInputDTO("1", new BigDecimal("10000")),
+                        new TemplateComponentInputDTO("1", new BigDecimal("12000"))
                 )
         );
 
@@ -74,7 +78,8 @@ class SalaryTemplateServiceImplTest {
                 "Default template",
                 null,
                 "2026-2027",
-                List.of(new TemplateComponentInputDTO(1L, new BigDecimal("10000")))
+                null,
+                List.of(new TemplateComponentInputDTO("1", new BigDecimal("10000")))
         );
 
         when(salaryTemplateRepository.save(any(SalaryTemplate.class))).thenAnswer(invocation -> {
@@ -89,6 +94,37 @@ class SalaryTemplateServiceImplTest {
         SalaryTemplateResponseDTO response = service.create(dto);
         assertEquals("PRT Standard", response.templateName());
         assertEquals("2026-2027", response.academicYear());
+    }
+
+    @Test
+    void createResolvesComponentByUuidReference() {
+        SalaryComponent basic = buildComponent(1L, "BASIC");
+        UUID componentUuid = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        basic.setUuid(componentUuid);
+
+        SalaryTemplateCreateDTO dto = new SalaryTemplateCreateDTO(
+                "PRT Standard",
+                "UUID component ref",
+                null,
+                "2026-2027",
+                null,
+                List.of(new TemplateComponentInputDTO(componentUuid.toString(), new BigDecimal("10000")))
+        );
+
+        when(salaryTemplateRepository.save(any(SalaryTemplate.class))).thenAnswer(invocation -> {
+            SalaryTemplate template = invocation.getArgument(0);
+            template.setId(10L);
+            return template;
+        });
+        when(salaryComponentRepository.findByUuid(componentUuid)).thenReturn(Optional.of(basic));
+        when(salaryTemplateComponentRepository.findByTemplate_IdAndActiveTrueOrderByComponent_SortOrderAscComponent_ComponentCodeAsc(10L))
+                .thenReturn(List.of());
+
+        SalaryTemplateResponseDTO response = service.create(dto);
+
+        assertEquals("PRT Standard", response.templateName());
+        verify(salaryComponentRepository).findByUuid(componentUuid);
+        verify(salaryComponentRepository, never()).findById(1L);
     }
 
     private SalaryComponent buildComponent(Long id, String code) {

@@ -30,10 +30,13 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -81,12 +84,12 @@ class StaffSalaryMappingServiceImplTest {
         when(overrideRepository.findByMapping_IdAndActiveTrue(1001L)).thenReturn(List.of());
 
         StaffSalaryMappingCreateDTO request = new StaffSalaryMappingCreateDTO(
-                101L,
-                10L,
+                "101",
+                "10",
                 LocalDate.of(2026, 4, 1),
                 null,
                 "Initial mapping",
-                List.of(new ComponentOverrideDTO(1L, new BigDecimal("12000"), "Seniority"))
+                List.of(new ComponentOverrideDTO("1", new BigDecimal("12000"), "Seniority"))
         );
 
         StaffSalaryMappingResponseDTO response = service.create(request);
@@ -113,8 +116,8 @@ class StaffSalaryMappingServiceImplTest {
         )).thenReturn(true);
 
         StaffSalaryMappingCreateDTO request = new StaffSalaryMappingCreateDTO(
-                101L,
-                10L,
+                "101",
+                "10",
                 LocalDate.of(2026, 4, 1),
                 LocalDate.of(2026, 6, 30),
                 "Overlap",
@@ -122,6 +125,49 @@ class StaffSalaryMappingServiceImplTest {
         );
 
         assertThrows(EdusyncException.class, () -> service.create(request));
+    }
+
+    @Test
+    void createResolvesOverrideComponentByUuidReference() {
+        Staff staff = buildStaff();
+        SalaryTemplate template = buildTemplate();
+        SalaryComponent basic = buildComponent(1L, "BASIC", SalaryComponentType.EARNING, SalaryCalculationMethod.FIXED);
+        UUID componentUuid = UUID.fromString("22222222-2222-2222-2222-222222222222");
+        basic.setUuid(componentUuid);
+
+        when(staffRepository.findById(101L)).thenReturn(Optional.of(staff));
+        when(salaryTemplateRepository.findById(10L)).thenReturn(Optional.of(template));
+        when(staffSalaryMappingRepository.findFirstByStaff_IdAndActiveTrueAndEffectiveFromLessThanEqualAndEffectiveToIsNullOrderByEffectiveFromDesc(101L, LocalDate.of(2026, 4, 1)))
+                .thenReturn(Optional.empty());
+        when(staffSalaryMappingRepository.existsOverlappingRange(
+                101L,
+                LocalDate.of(2026, 4, 1),
+                LocalDate.of(9999, 12, 31),
+                LocalDate.of(9999, 12, 31),
+                null
+        )).thenReturn(false);
+        when(staffSalaryMappingRepository.save(any(StaffSalaryMapping.class))).thenAnswer(invocation -> {
+            StaffSalaryMapping mapping = invocation.getArgument(0);
+            mapping.setId(1001L);
+            return mapping;
+        });
+        when(salaryComponentRepository.findByUuid(componentUuid)).thenReturn(Optional.of(basic));
+        when(overrideRepository.findByMapping_IdAndActiveTrue(1001L)).thenReturn(List.of());
+
+        StaffSalaryMappingCreateDTO request = new StaffSalaryMappingCreateDTO(
+                "101",
+                "10",
+                LocalDate.of(2026, 4, 1),
+                null,
+                "Initial mapping",
+                List.of(new ComponentOverrideDTO(componentUuid.toString(), new BigDecimal("12000"), "Seniority"))
+        );
+
+        StaffSalaryMappingResponseDTO response = service.create(request);
+
+        assertEquals(1001L, response.mappingId());
+        verify(salaryComponentRepository).findByUuid(componentUuid);
+        verify(salaryComponentRepository, never()).findById(1L);
     }
 
     @Test
