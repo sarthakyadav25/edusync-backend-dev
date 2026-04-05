@@ -13,6 +13,7 @@ import com.project.edusync.em.model.entity.ExamSchedule;
 import com.project.edusync.em.model.entity.Seat;
 import com.project.edusync.em.model.entity.SeatAllocation;
 import com.project.edusync.em.model.enums.SeatPosition;
+import com.project.edusync.em.model.enums.SeatSide;
 import com.project.edusync.em.model.repository.ExamScheduleRepository;
 import com.project.edusync.em.model.repository.SeatAllocationRepository;
 import com.project.edusync.em.model.repository.SeatRepository;
@@ -98,6 +99,7 @@ public class SeatAllocationService {
         LocalDateTime start = deriveStartTime(schedule);
         LocalDateTime end = deriveEndTime(schedule);
         int maxPerSeat = schedule.getMaxStudentsPerSeat();
+        SeatPosition schedulePosition = resolveSchedulePosition(schedule);
 
         // 1. Count total students needing seats
         int totalStudents = countStudentsForSchedule(schedule);
@@ -109,28 +111,23 @@ public class SeatAllocationService {
         Map<Long, Integer> examSeatUnitsMap = rooms.stream()
             .collect(Collectors.toMap(Room::getId, r -> Optional.ofNullable(r.getExamSeatUnits()).orElse(0)));
 
-        // 4. Total allocation count per room in time window (SINGLE query)
-        //    This counts ALL allocations, not distinct seats
-        Map<Long, Long> totalAllocMap = new HashMap<>();
-        allocationRepository.countOccupiedAllocationsPerRoom(start, end)
-            .forEach(row -> totalAllocMap.put((Long) row[0], (Long) row[1]));
-
-        // 5. For double-seating exams: count seats blocked by single-seating exams
+        // 4. For double-seating exams: count seats blocked by SINGLE allocations or same side usage
         Map<Long, Long> blockedSeatCountMap = new HashMap<>();
-        Map<Long, Long> allocsOnBlockedMap = new HashMap<>();
 
         if (maxPerSeat > 1) {
-            allocationRepository.countSingleSeatBlockedSeatsPerRoom(start, end)
+            allocationRepository.countBlockedSeatsPerRoomForPosition(start, end, schedulePosition)
                 .forEach(row -> blockedSeatCountMap.put((Long) row[0], (Long) row[1]));
-            allocationRepository.countAllocationsOnBlockedSeatsPerRoom(start, end)
-                .forEach(row -> allocsOnBlockedMap.put((Long) row[0], (Long) row[1]));
         }
+
+        // Room Occupancy details to determine mode and occupiedBy array
+        List<Object[]> roomOccupancyRows = allocationRepository.findRoomOccupancyDetails(start, end);
+        Map<Long, List<Object[]>> occupancyDetailsByRoom = roomOccupancyRows.stream()
+            .collect(Collectors.groupingBy(row -> ((Long) row[0])));
 
         // 6. Build response with capacity-aware math
         return rooms.stream()
             .map(room -> {
                 int totalSeats = examSeatUnitsMap.getOrDefault(room.getId(), 0);
-                long totalAllocs = totalAllocMap.getOrDefault(room.getId(), 0L);
 
                 int totalCapacity;
                 int occupiedCapacity;
@@ -143,13 +140,29 @@ public class SeatAllocationService {
                     availableCapacity = totalCapacity - occupiedCapacity;
                 } else {
                     long blockedSeats = blockedSeatCountMap.getOrDefault(room.getId(), 0L);
-                    long effectiveSeats = totalSeats - blockedSeats;
-                    totalCapacity = (int) (effectiveSeats * maxPerSeat);
-                    long allocsOnBlocked = allocsOnBlockedMap.getOrDefault(room.getId(), 0L);
-                    long nonBlockedAllocs = totalAllocs - allocsOnBlocked;
-                    occupiedCapacity = (int) nonBlockedAllocs;
+                    totalCapacity = totalSeats;
+                    occupiedCapacity = (int) blockedSeats;
                     availableCapacity = totalCapacity - occupiedCapacity;
                 }
+
+                List<Object[]> occupancyRows = occupancyDetailsByRoom.getOrDefault(room.getId(), Collections.emptyList());
+                boolean hasSingleExam = occupancyRows.stream().anyMatch(row -> ((Integer) row[1]) == 1);
+                
+                String mode;
+                if (hasSingleExam) {
+                    mode = "SINGLE";
+                } else if (occupancyRows.isEmpty()) {
+                    mode = "DOUBLE"; // Empty but supports double
+                } else {
+                    mode = "SHARED"; // Occupied by multiple DOUBLE exams
+                }
+
+                List<com.project.edusync.em.model.dto.response.OccupiedByDTO> occupiedBy = occupancyRows.stream()
+                    .map(row -> new com.project.edusync.em.model.dto.response.OccupiedByDTO(
+                            (String) row[2], // subjectName
+                            (String) row[3], // className
+                            ((Long) row[4]).intValue() // count
+                    )).collect(Collectors.toList());
 
                 return RoomAvailabilityDTO.builder()
                     .roomId(room.getId())
@@ -163,6 +176,8 @@ public class SeatAllocationService {
                     .maxStudentsPerSeat(maxPerSeat)
                     .totalStudentsToSeat(totalStudents)
                     .floorNumber(room.getFloorNumber())
+                    .mode(mode)
+                    .occupiedBy(occupiedBy)
                     .build();
             })
             .sorted(Comparator.comparingInt(RoomAvailabilityDTO::getAvailableCapacity).reversed())
@@ -183,48 +198,37 @@ public class SeatAllocationService {
         LocalDateTime start = deriveStartTime(schedule);
         LocalDateTime end = deriveEndTime(schedule);
         int maxPerSeat = schedule.getMaxStudentsPerSeat();
+        SeatPosition schedulePosition = resolveSchedulePosition(schedule);
 
         // All seats for room (SINGLE query)
         List<Seat> seats = seatRepository.findByRoomIdOrderByRowNumberAscColumnNumberAsc(room.getId());
 
-        // Per-seat allocation counts via GROUP BY (SINGLE query, no subquery)
         Map<Long, Long> seatOccupancy = new HashMap<>();
-        allocationRepository.countAllocationsPerSeatInRoom(room.getId(), start, end)
-            .forEach(row -> seatOccupancy.put((Long) row[0], (Long) row[1]));
+        if (maxPerSeat == 1) {
+            allocationRepository.countAllocationsPerSeatInRoom(room.getId(), start, end)
+                .forEach(row -> seatOccupancy.put((Long) row[0], (Long) row[1]));
+        } else {
+            allocationRepository.countAllocationsPerSeatInRoomByPosition(room.getId(), start, end, schedulePosition)
+                .forEach(row -> seatOccupancy.put((Long) row[0], (Long) row[1]));
+        }
 
-        // Seats blocked by single-seating exams (SINGLE query)
-        Set<Long> singleSeatBlocked = allocationRepository
-            .findSeatIdsBlockedBySingleSeating(room.getId(), start, end);
+        Set<Long> blockedForPosition = maxPerSeat == 1
+            ? allocationRepository.findOccupiedSeatIdsInRoom(room.getId(), start, end)
+            : allocationRepository.findSeatIdsBlockedForPosition(room.getId(), start, end, schedulePosition);
+
+        Map<Long, List<String>> occupiedPositionsMap = new HashMap<>();
+        allocationRepository.findOccupiedPositionsPerSeatInRoom(room.getId(), start, end)
+            .forEach(row -> occupiedPositionsMap
+                .computeIfAbsent((Long) row[0], k -> new ArrayList<>())
+                .add(((SeatPosition) row[1]).name()));
 
         return seats.stream()
             .map(s -> {
                 int occupied = seatOccupancy.getOrDefault(s.getId(), 0L).intValue();
-                boolean blockedBySingle = singleSeatBlocked.contains(s.getId());
-
-                // A seat is full if:
-                // - It's blocked by a single-seating exam (regardless of current exam's maxPerSeat)
-                // - OR its occupancy has reached the current exam's maxPerSeat
-                boolean isFull;
-                int effectiveCapacity;
-
-                if (blockedBySingle) {
-                    // Single-seating exam owns this seat — it's fully blocked
-                    isFull = true;
-                    effectiveCapacity = occupied; // show actual occupancy as capacity (it's 1)
-                } else {
-                    effectiveCapacity = maxPerSeat;
-                    isFull = occupied >= maxPerSeat;
-                }
+                boolean isFull = blockedForPosition.contains(s.getId());
+                int effectiveCapacity = 1;
 
                 int availableSlots = isFull ? 0 : (effectiveCapacity - occupied);
-
-                // Fetch occupied positions to populate grid metadata
-                List<String> occupiedPositionsList = allocationRepository
-                    .findOccupiedPositionsPerSeatInRoom(room.getId(), start, end)
-                    .stream()
-                    .filter(row -> ((Long) row[0]).equals(s.getId()))
-                    .map(row -> ((SeatPosition) row[1]).name())
-                    .collect(Collectors.toList());
 
                 return SeatAvailabilityDTO.builder()
                     .seatId(s.getId())
@@ -236,7 +240,7 @@ public class SeatAllocationService {
                     .availableSlots(Math.max(0, availableSlots))
                     .isFull(isFull)
                     .available(!isFull) // backward compat
-                    .occupiedPositions(occupiedPositionsList)
+                    .occupiedPositions(occupiedPositionsMap.getOrDefault(s.getId(), Collections.emptyList()))
                     .build();
             })
             .collect(Collectors.toList());
@@ -253,6 +257,7 @@ public class SeatAllocationService {
         LocalDateTime start = deriveStartTime(schedule);
         LocalDateTime end = deriveEndTime(schedule);
         int maxPerSeat = schedule.getMaxStudentsPerSeat();
+        SeatPosition schedulePosition = resolveSchedulePosition(schedule);
 
         Student student = studentRepository.findByUuid(dto.getStudentId())
             .orElseThrow(() -> new ResourceNotFoundException("Student not found with id: " + dto.getStudentId()));
@@ -271,29 +276,19 @@ public class SeatAllocationService {
             throw new BadRequestException("Student already has a seat allocation in this time window");
         }
 
-        // Check if seat is blocked by a single-seating exam
-        Set<Long> singleSeatBlocked = allocationRepository
-            .findSeatIdsBlockedBySingleSeating(room.getId(), start, end);
-        if (singleSeatBlocked.contains(seat.getId())) {
-            throw new BadRequestException(
-                "Seat is locked by a single-seating exam in this time window. Cannot assign.");
+        if (maxPerSeat == 1) {
+            Set<Long> occupiedSeatIds = allocationRepository.findOccupiedSeatIdsInRoom(room.getId(), start, end);
+            if (occupiedSeatIds.contains(seat.getId())) {
+                throw new BadRequestException("Seat is already occupied in this time window. Cannot assign.");
+            }
+        } else {
+            Set<Long> blockedSeats = allocationRepository
+                .findSeatIdsBlockedForPosition(room.getId(), start, end, schedulePosition);
+            if (blockedSeats.contains(seat.getId())) {
+                throw new BadRequestException(
+                    "Seat side is already occupied for this time window. Cannot assign.");
+            }
         }
-
-        // Check seat occupancy via GROUP BY query (no subquery)
-        Map<Long, Long> seatOccupancy = new HashMap<>();
-        allocationRepository.countAllocationsPerSeatInRoom(room.getId(), start, end)
-            .forEach(row -> seatOccupancy.put((Long) row[0], (Long) row[1]));
-
-        long currentOccupancy = seatOccupancy.getOrDefault(seat.getId(), 0L);
-        if (currentOccupancy >= maxPerSeat) {
-            throw new BadRequestException(
-                "Seat is full (" + currentOccupancy + "/" + maxPerSeat + "). Cannot assign more students.");
-        }
-
-        // Resolve position
-        Map<Long, Set<SeatPosition>> positionMap = buildPositionMap(room.getId(), start, end);
-        Set<SeatPosition> occupiedPositions = positionMap.getOrDefault(seat.getId(), EnumSet.noneOf(SeatPosition.class));
-        SeatPosition position = resolvePosition(maxPerSeat, occupiedPositions);
 
         SeatAllocation allocation = new SeatAllocation();
         allocation.setSeat(seat);
@@ -301,7 +296,7 @@ public class SeatAllocationService {
         allocation.setExamSchedule(schedule);
         allocation.setStartTime(start);
         allocation.setEndTime(end);
-        allocation.setPosition(position);
+        allocation.setPosition(schedulePosition);
 
         return toResponse(allocationRepository.save(allocation));
     }
@@ -329,6 +324,7 @@ public class SeatAllocationService {
         LocalDateTime start = deriveStartTime(schedule);
         LocalDateTime end = deriveEndTime(schedule);
         int maxPerSeat = schedule.getMaxStudentsPerSeat();
+        SeatPosition schedulePosition = resolveSchedulePosition(schedule);
 
         // 1. Resolve all students for this schedule's class/section
         List<Student> allStudents = resolveStudents(schedule);
@@ -348,33 +344,32 @@ public class SeatAllocationService {
             throw new BadRequestException("All students already have seat allocations");
         }
 
-        // 3. PESSIMISTIC LOCK: lock ALL seats in room (unfiltered)
-        //    This blocks concurrent allocations for the same room entirely
-        List<Seat> allSeats = allocationRepository.lockAllSeatsInRoom(room.getId());
+        // 3. PESSIMISTIC LOCK: lock candidate seats in room
+        List<Seat> allSeats = maxPerSeat == 1
+            ? allocationRepository.lockAllSeatsInRoom(room.getId())
+            : allocationRepository.lockAvailableSeatsInRoom(room.getId(), start, end, schedulePosition);
 
         if (allSeats.isEmpty()) {
-            throw new BadRequestException("No seats configured in this room");
+            throw new BadRequestException("No configured seats available for sharing in this room");
         }
 
         // 4. Get per-seat occupancy via GROUP BY (SINGLE query, no subquery)
         Map<Long, Long> seatOccupancy = new HashMap<>();
-        allocationRepository.countAllocationsPerSeatInRoom(room.getId(), start, end)
-            .forEach(row -> seatOccupancy.put((Long) row[0], (Long) row[1]));
+        if (maxPerSeat == 1) {
+            allocationRepository.countAllocationsPerSeatInRoom(room.getId(), start, end)
+                .forEach(row -> seatOccupancy.put((Long) row[0], (Long) row[1]));
+        } else {
+            allocationRepository.countAllocationsPerSeatInRoomByPosition(room.getId(), start, end, schedulePosition)
+                .forEach(row -> seatOccupancy.put((Long) row[0], (Long) row[1]));
+        }
 
-        // 5. Get seats blocked by single-seating exams
-        Set<Long> singleSeatBlocked = allocationRepository
-            .findSeatIdsBlockedBySingleSeating(room.getId(), start, end);
-
-        log.info("Room {} has {} total seats, {} blocked by single-seating exams",
-            room.getUuid(), allSeats.size(), singleSeatBlocked.size());
+        List<Seat> availableSeats = allSeats.stream()
+            .filter(s -> seatOccupancy.getOrDefault(s.getId(), 0L) < 1)
+            .collect(Collectors.toList());
 
         // 6. CAPACITY VALIDATION: compute total available capacity
-        //    Exclude seats blocked by single-seating exams
-        long totalAvailableCapacity = allSeats.stream()
-            .filter(s -> !singleSeatBlocked.contains(s.getId()))
-            .mapToLong(s -> maxPerSeat - seatOccupancy.getOrDefault(s.getId(), 0L))
-            .filter(slots -> slots > 0)
-            .sum();
+        //    Seats returned by lockAvailableSeatsInRoom are inherently free of single-seating/same-subject conflicts
+        long totalAvailableCapacity = availableSeats.size();
 
         if (totalAvailableCapacity <= 0) {
             throw new BadRequestException("No available capacity in this room");
@@ -385,10 +380,7 @@ public class SeatAllocationService {
             toAllocate, room.getUuid(), totalAvailableCapacity, maxPerSeat, schedule.getId());
 
         // 7. SORT: partially filled seats first (desc occupancy), then empty seats
-        //    Filter out seats that are full OR blocked by single-seating
-        List<Seat> sortedSeats = allSeats.stream()
-            .filter(s -> !singleSeatBlocked.contains(s.getId()))
-            .filter(s -> seatOccupancy.getOrDefault(s.getId(), 0L) < maxPerSeat)
+        List<Seat> sortedSeats = availableSeats.stream()
             .sorted(Comparator
                 // Partially filled first (higher occupancy = higher priority)
                 .comparingLong((Seat s) -> seatOccupancy.getOrDefault(s.getId(), 0L)).reversed()
@@ -397,36 +389,23 @@ public class SeatAllocationService {
                 .thenComparingInt(Seat::getColumnNumber))
             .collect(Collectors.toList());
 
-        // Pre-load position map
-        Map<Long, Set<SeatPosition>> positionMap = buildPositionMap(room.getId(), start, end);
-
-        // 8. Build allocations — fill each seat up to maxPerSeat
+        // 8. Build allocations — one allocation per seat for this schedule
         List<SeatAllocation> newAllocations = new ArrayList<>(toAllocate);
         int studentIdx = 0;
 
         for (Seat seat : sortedSeats) {
             if (studentIdx >= toAllocate) break;
 
-            long currentOccupancy = seatOccupancy.getOrDefault(seat.getId(), 0L);
-            Set<SeatPosition> occupied = positionMap.computeIfAbsent(
-                seat.getId(), k -> EnumSet.noneOf(SeatPosition.class));
+            SeatAllocation sa = new SeatAllocation();
+            sa.setSeat(seat);
+            sa.setStudent(unallocated.get(studentIdx));
+            sa.setExamSchedule(schedule);
+            sa.setStartTime(start);
+            sa.setEndTime(end);
+            sa.setPosition(schedulePosition);
 
-            while (currentOccupancy < maxPerSeat && studentIdx < toAllocate) {
-                SeatPosition position = resolvePosition(maxPerSeat, occupied);
-
-                SeatAllocation sa = new SeatAllocation();
-                sa.setSeat(seat);
-                sa.setStudent(unallocated.get(studentIdx));
-                sa.setExamSchedule(schedule);
-                sa.setStartTime(start);
-                sa.setEndTime(end);
-                sa.setPosition(position);
-
-                occupied.add(position);
-                newAllocations.add(sa);
-                currentOccupancy++;
-                studentIdx++;
-            }
+            newAllocations.add(sa);
+            studentIdx++;
         }
 
         // 9. BATCHED insert
@@ -485,22 +464,15 @@ public class SeatAllocationService {
 
     // ── Private helpers ──────────────────────────────────────────
 
-    private SeatPosition resolvePosition(int maxPerSeat, Set<SeatPosition> occupiedPositions) {
-        if (maxPerSeat == 1) return SeatPosition.SINGLE;
-        if (!occupiedPositions.contains(SeatPosition.LEFT)) return SeatPosition.LEFT;
-        if (!occupiedPositions.contains(SeatPosition.RIGHT)) return SeatPosition.RIGHT;
-        throw new BadRequestException("Seat is full — both LEFT and RIGHT positions are occupied");
-    }
-
-    private Map<Long, Set<SeatPosition>> buildPositionMap(Long roomId, LocalDateTime start, LocalDateTime end) {
-        Map<Long, Set<SeatPosition>> map = new HashMap<>();
-        allocationRepository.findOccupiedPositionsPerSeatInRoom(roomId, start, end)
-            .forEach(row -> {
-                Long seatId = (Long) row[0];
-                SeatPosition pos = (SeatPosition) row[1];
-                map.computeIfAbsent(seatId, k -> EnumSet.noneOf(SeatPosition.class)).add(pos);
-            });
-        return map;
+    private SeatPosition resolveSchedulePosition(ExamSchedule schedule) {
+        if (schedule.getMaxStudentsPerSeat() == 1) {
+            return SeatPosition.SINGLE;
+        }
+        SeatSide side = schedule.getSeatSide();
+        if (side == null) {
+            throw new BadRequestException("seatSide is required for DOUBLE seating schedules");
+        }
+        return side == SeatSide.LEFT ? SeatPosition.LEFT : SeatPosition.RIGHT;
     }
 
     private ExamSchedule fetchSchedule(Long id) {

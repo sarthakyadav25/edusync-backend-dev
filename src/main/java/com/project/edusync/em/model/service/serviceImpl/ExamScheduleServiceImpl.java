@@ -107,6 +107,19 @@ public class ExamScheduleServiceImpl implements ExamScheduleService {
         if (dto.getPassingMarks() != null && dto.getPassingMarks().compareTo(dto.getMaxMarks()) > 0) {
             throw new EdusyncException("EM-400", "Passing marks cannot be greater than max marks", HttpStatus.BAD_REQUEST);
         }
+
+        int maxStudentsPerSeat = dto.getMaxStudentsPerSeat() != null ? dto.getMaxStudentsPerSeat() : 1;
+        if (maxStudentsPerSeat != 1 && maxStudentsPerSeat != 2) {
+            throw new EdusyncException("EM-400", "maxStudentsPerSeat must be 1 or 2", HttpStatus.BAD_REQUEST);
+        }
+
+        if (maxStudentsPerSeat == 2 && dto.getSeatSide() == null) {
+            throw new EdusyncException("EM-400", "seatSide is required for DOUBLE seating", HttpStatus.BAD_REQUEST);
+        }
+
+        if (maxStudentsPerSeat == 1 && dto.getSeatSide() != null) {
+            throw new EdusyncException("EM-400", "seatSide must be null for SINGLE seating", HttpStatus.BAD_REQUEST);
+        }
     }
 
     private void mapDtoToEntity(ExamScheduleRequestDTO dto, ExamSchedule entity) {
@@ -139,11 +152,9 @@ public class ExamScheduleServiceImpl implements ExamScheduleService {
         entity.setDuration(dto.getDuration());
         entity.setMaxMarks(dto.getMaxMarks().intValue()); // Fix: convert BigDecimal to int
 
-        if (dto.getMaxStudentsPerSeat() != null) {
-            entity.setMaxStudentsPerSeat(dto.getMaxStudentsPerSeat());
-        } else {
-            entity.setMaxStudentsPerSeat(1); // default to 1
-        }
+        int maxStudentsPerSeat = dto.getMaxStudentsPerSeat() != null ? dto.getMaxStudentsPerSeat() : 1;
+        entity.setMaxStudentsPerSeat(maxStudentsPerSeat);
+        entity.setSeatSide(maxStudentsPerSeat == 2 ? dto.getSeatSide() : null);
     }
 
     private ExamScheduleResponseDTO mapEntityToResponse(ExamSchedule entity) {
@@ -167,6 +178,7 @@ public class ExamScheduleServiceImpl implements ExamScheduleService {
                 .passingMarks(java.math.BigDecimal.valueOf(entity.getMaxMarks())) // TODO: replace with actual field if available
                 .totalStudents(totalStudents)
                 .maxStudentsPerSeat(entity.getMaxStudentsPerSeat())
+                .seatSide(entity.getSeatSide())
                 .build();
     }
 }

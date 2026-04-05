@@ -44,6 +44,10 @@ public class RoomAvailabilityDTO {
 
     private Integer floorNumber;
 
+    private String mode; // "SINGLE", "DOUBLE", "SHARED"
+
+    private java.util.List<OccupiedByDTO> occupiedBy;
+
     // ── Backward-compatible aliases ────────────────────────────────
     /** @deprecated Use {@link #occupiedCapacity} */
     public int getOccupiedSeats() { return occupiedCapacity; }

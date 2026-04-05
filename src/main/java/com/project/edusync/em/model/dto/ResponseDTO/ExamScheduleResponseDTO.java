@@ -1,5 +1,6 @@
 package com.project.edusync.em.model.dto.ResponseDTO;
 
+import com.project.edusync.em.model.enums.SeatSide;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -39,4 +40,5 @@ public class ExamScheduleResponseDTO {
     private String roomNumber;
     private Long totalStudents;
     private Integer maxStudentsPerSeat;
+    private SeatSide seatSide;
 }
