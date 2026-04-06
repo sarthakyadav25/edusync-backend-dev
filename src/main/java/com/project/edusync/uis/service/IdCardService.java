@@ -1,6 +1,5 @@
 package com.project.edusync.uis.service;
 
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -63,4 +62,13 @@ public interface IdCardService {
      *         if the user has no Student or Staff profile.
      */
     byte[] generateMyIdCard(Long userId, String template);
+
+    /**
+     * Generates self-service ID card HTML (rendered Thymeleaf output) for preview/embedding use-cases.
+     *
+     * @param userId   The IAM user ID from the JWT token.
+     * @param template The template style ("classic", "modern", "minimal").
+     * @return Fully rendered HTML string.
+     */
+    String generateMyIdCardHtml(Long userId, String template);
 }

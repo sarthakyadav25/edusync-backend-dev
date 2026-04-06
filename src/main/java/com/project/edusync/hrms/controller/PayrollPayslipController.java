@@ -1,6 +1,7 @@
 package com.project.edusync.hrms.controller;
 
 import com.project.edusync.hrms.dto.payroll.PayslipDetailDTO;
+import com.project.edusync.hrms.dto.payroll.StaffAttendanceSummaryDTO;
 import com.project.edusync.hrms.dto.payroll.PayslipSummaryDTO;
 import com.project.edusync.hrms.service.PayrollService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -14,8 +15,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
 
 @RestController
 @RequestMapping("${api.url}/auth/hrms/payroll")
@@ -80,6 +84,18 @@ public class PayrollPayslipController {
                 .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_PDF_VALUE)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"my-payslip-" + identifier + ".pdf\"")
                 .body(pdf);
+    }
+
+    @GetMapping("/self/attendance")
+    @Operation(summary = "Get my attendance summary")
+    @PreAuthorize("hasAnyAuthority('ROLE_TEACHER','ROLE_PRINCIPAL','ROLE_LIBRARIAN','ROLE_ADMIN','ROLE_SCHOOL_ADMIN','ROLE_SUPER_ADMIN')")
+    public ResponseEntity<StaffAttendanceSummaryDTO> getMyAttendance(
+            @RequestParam(required = false) Integer year,
+            @RequestParam(required = false) Integer month
+    ) {
+        int y = year == null ? LocalDate.now().getYear() : year;
+        int m = month == null ? LocalDate.now().getMonthValue() : month;
+        return ResponseEntity.ok(payrollService.getMyAttendanceSummary(y, m));
     }
 }
 

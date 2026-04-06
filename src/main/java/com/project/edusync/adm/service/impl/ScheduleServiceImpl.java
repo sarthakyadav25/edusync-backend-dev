@@ -20,13 +20,13 @@ import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZoneOffset;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @Service
 @Slf4j
@@ -52,6 +52,16 @@ public class ScheduleServiceImpl implements ScheduleService {
             throw new ResourceNotFoundException("No section resource found with id: " + sectionId);
         }
         List<Schedule> schedules = scheduleRepository.findAllActiveBySectionUuid(sectionId);
+        return schedules.stream()
+                .map(this::toScheduleResponseDto)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ScheduleResponseDto> getScheduleForTeacher(Long staffId) {
+        log.info("Fetching schedule for staff id: {}", staffId);
+        List<Schedule> schedules = scheduleRepository.findAllActiveByTeacherStaffId(staffId);
         return schedules.stream()
                 .map(this::toScheduleResponseDto)
                 .collect(Collectors.toList());
@@ -88,10 +98,13 @@ public class ScheduleServiceImpl implements ScheduleService {
         // 1. Inherit section default room when request does not send roomId
         assignRoomIfMissing(requestDto);
 
-        // 2. Validate for conflicts
+        // 2. Ensure the first teaching period of each day is assigned to the class teacher.
+        validateClassTeacherForFirstPeriod(requestDto);
+
+        // 3. Validate for conflicts
         validateScheduleConflicts(requestDto, null, null);
 
-        // 3. Build and save the schedule entity
+        // 4. Build and save the schedule entity
         Schedule newSchedule = new Schedule();
         newSchedule.setSection(findSectionById(requestDto.getSectionId()));
         newSchedule.setSubject(findSubjectById(requestDto.getSubjectId()));
@@ -101,7 +114,7 @@ public class ScheduleServiceImpl implements ScheduleService {
         newSchedule.setIsActive(true);
         newSchedule.setStatus(ScheduleStatus.DRAFT);
 
-        // 4. Save and return
+        // 5. Save and return
         Schedule savedSchedule = scheduleRepository.save(newSchedule);
         log.info("Schedule entry {} created successfully", savedSchedule.getUuid());
 
@@ -125,17 +138,20 @@ public class ScheduleServiceImpl implements ScheduleService {
         // 1. Inherit section default room when request does not send roomId
         assignRoomIfMissing(requestDto);
 
-        // 2. Validate for conflicts (excluding the current scheduleId)
+        // 2. Ensure the first teaching period of each day is assigned to the class teacher.
+        validateClassTeacherForFirstPeriod(requestDto);
+
+        // 3. Validate for conflicts (excluding the current scheduleId)
         validateScheduleConflicts(requestDto, scheduleId, null);
 
-        // 3. Fetch and update all related entities
+        // 4. Fetch and update all related entities
         existingSchedule.setSection(findSectionById(requestDto.getSectionId()));
         existingSchedule.setSubject(findSubjectById(requestDto.getSubjectId()));
         existingSchedule.setTeacher(findTeacherById(requestDto.getTeacherId()));
         existingSchedule.setRoom(findRoomById(requestDto.getRoomId()));
         existingSchedule.setTimeslot(findTimeslotById(requestDto.getTimeslotId()));
 
-        // 4. Save and return
+        // 5. Save and return
         Schedule updatedSchedule = scheduleRepository.save(existingSchedule);
         log.info("Schedule entry {} updated successfully", updatedSchedule.getUuid());
 
@@ -222,6 +238,9 @@ public class ScheduleServiceImpl implements ScheduleService {
 
             // If roomId is missing, inherit the section default room
             assignRoomIfMissing(dto);
+
+            // The first teaching period must be handled by the class teacher.
+            validateClassTeacherForFirstPeriod(dto);
 
             // 2. Validate conflicts against OTHER sections
             validateScheduleConflicts(dto, null, sectionId);
@@ -390,6 +409,35 @@ public class ScheduleServiceImpl implements ScheduleService {
         }
     }
 
+    private void validateClassTeacherForFirstPeriod(ScheduleRequestDto dto) {
+        Section section = findSectionById(dto.getSectionId());
+        Timeslot selectedTimeslot = findTimeslotById(dto.getTimeslotId());
+
+        Optional<Timeslot> firstTeachingSlot = timeslotRepository
+                .findActiveTeachingByDayOfWeek(selectedTimeslot.getDayOfWeek(), Pageable.ofSize(1))
+                .stream()
+                .findFirst();
+        if (firstTeachingSlot.isEmpty() || !firstTeachingSlot.get().getUuid().equals(selectedTimeslot.getUuid())) {
+            return;
+        }
+
+        if (section.getClassTeacher() == null || section.getClassTeacher().getId() == null) {
+            throw new InvalidRequestException(
+                    "Class teacher must be configured for section '" + section.getSectionName() +
+                            "' because the first period must be assigned to the class teacher."
+            );
+        }
+
+        TeacherDetails teacherDetails = findTeacherById(dto.getTeacherId());
+        Long assignedStaffId = teacherDetails.getStaff() == null ? null : teacherDetails.getStaff().getId();
+        if (!section.getClassTeacher().getId().equals(assignedStaffId)) {
+            throw new InvalidRequestException(
+                    "For " + formatDayOfWeek(selectedTimeslot) + " first period (" + formatTimeslot(selectedTimeslot) +
+                            "), only class teacher can be assigned for section '" + section.getSectionName() + "'."
+            );
+        }
+    }
+
     private Schedule buildSchedule(ScheduleRequestDto requestDto) {
         Schedule schedule = new Schedule();
         schedule.setSection(findSectionById(requestDto.getSectionId()));
@@ -481,6 +529,10 @@ public class ScheduleServiceImpl implements ScheduleService {
                                         entity.getSection().getDefaultRoom().getUuid(),
                                         entity.getSection().getDefaultRoom().getName()
                                 ))
+                        .classTeacherUuid(entity.getSection().getClassTeacher() == null ? null : entity.getSection().getClassTeacher().getUuid())
+                        .classTeacherName(entity.getSection().getClassTeacher() == null
+                                ? null
+                                : (entity.getSection().getClassTeacher().getUserProfile().getFirstName() + " " + entity.getSection().getClassTeacher().getUserProfile().getLastName()).trim())
                         .build())
                 .subject(ScheduleResponseDto.NestedSubjectResponseDto.builder()
                         .uuid(entity.getSubject().getUuid())

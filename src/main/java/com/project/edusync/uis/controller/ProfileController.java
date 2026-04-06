@@ -27,6 +27,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * REST Controller for managing User Profiles.
@@ -222,6 +223,18 @@ public class ProfileController {
                 .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_PDF_VALUE)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"my-id-card.pdf\"")
                 .body(pdf);
+    }
+
+    @GetMapping("/me/id-card/preview-html")
+    @PreAuthorize("hasAuthority('profile:read:own')")
+    @Operation(summary = "Get My ID Card HTML Preview",
+            description = "Renders and returns ID card HTML for the current user (for iframe/interactive preview use-cases).")
+    public ResponseEntity<Map<String, String>> getMyIdCardPreviewHtml() {
+        Long currentUserId = authUtil.getCurrentUserId();
+        log.info("Self-service ID card HTML preview requested for userId={}", currentUserId);
+
+        String html = idCardService.generateMyIdCardHtml(currentUserId, "");
+        return ResponseEntity.ok(Map.of("html", html));
     }
 
     // ADMINISTRATIVE ENDPOINTS (/{userId})

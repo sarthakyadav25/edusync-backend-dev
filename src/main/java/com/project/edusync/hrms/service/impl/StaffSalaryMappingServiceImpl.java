@@ -2,6 +2,7 @@ package com.project.edusync.hrms.service.impl;
 
 import com.project.edusync.common.exception.EdusyncException;
 import com.project.edusync.common.exception.ResourceNotFoundException;
+import com.project.edusync.common.security.AuthUtil;
 import com.project.edusync.common.utils.PublicIdentifierResolver;
 import com.project.edusync.hrms.dto.calendar.BulkOperationResultDTO;
 import com.project.edusync.hrms.dto.salary.ComponentOverrideDTO;
@@ -54,6 +55,7 @@ public class StaffSalaryMappingServiceImpl implements StaffSalaryMappingService 
     private final SalaryTemplateRepository salaryTemplateRepository;
     private final SalaryTemplateComponentRepository salaryTemplateComponentRepository;
     private final SalaryComponentRepository salaryComponentRepository;
+    private final AuthUtil authUtil;
 
     @Override
     @Transactional(readOnly = true)
@@ -314,6 +316,21 @@ public class StaffSalaryMappingServiceImpl implements StaffSalaryMappingService 
     public ComputedSalaryBreakdownDTO computeBreakdownByIdentifier(String identifier) {
         StaffSalaryMapping mapping = findActiveMappingByIdentifier(identifier);
         return computeBreakdown(mapping.getId());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ComputedSalaryBreakdownDTO getMyComputedBreakdown() {
+        Long currentUserId = authUtil.getCurrentUserId();
+        Staff staff = staffRepository.findByUserProfile_User_Id(currentUserId)
+                .orElseThrow(() -> new EdusyncException("Staff profile not found", HttpStatus.NOT_FOUND));
+
+        List<StaffSalaryMapping> mappings = staffSalaryMappingRepository.findByStaff_IdAndActiveTrueOrderByEffectiveFromDesc(staff.getId());
+        if (mappings.isEmpty()) {
+            throw new EdusyncException("No salary structure configured for your account", HttpStatus.NOT_FOUND);
+        }
+
+        return computeBreakdown(mappings.get(0).getId());
     }
 
     private BigDecimal computeAmount(

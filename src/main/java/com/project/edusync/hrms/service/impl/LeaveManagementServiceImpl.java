@@ -1,9 +1,11 @@
 package com.project.edusync.hrms.service.impl;
 
-import com.project.edusync.common.exception.EdusyncException;
-import com.project.edusync.common.exception.ResourceNotFoundException;
-import com.project.edusync.common.security.AuthUtil;
+ import com.project.edusync.common.security.AuthUtil;
 import com.project.edusync.common.utils.PublicIdentifierResolver;
+import com.project.edusync.hrms.exception.LeaveAccessDeniedException;
+import com.project.edusync.hrms.exception.LeaveConflictException;
+import com.project.edusync.hrms.exception.LeaveNotFoundException;
+import com.project.edusync.hrms.exception.LeaveValidationException;
 import com.project.edusync.hrms.dto.calendar.BulkOperationResultDTO;
 import com.project.edusync.hrms.dto.leave.LeaveApplicationCreateDTO;
 import com.project.edusync.hrms.dto.leave.LeaveApplicationResponseDTO;
@@ -28,7 +30,6 @@ import com.project.edusync.uis.repository.StaffRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -110,19 +111,19 @@ public class LeaveManagementServiceImpl implements LeaveManagementService {
         validateHalfDayConstraints(dto);
 
         if (leaveApplicationRepository.existsOverlapping(currentStaff.getId(), dto.fromDate(), dto.toDate(), OVERLAP_BLOCKING_STATUSES)) {
-            throw new EdusyncException("Overlapping leave application exists for the selected date range", HttpStatus.CONFLICT);
+            throw new LeaveConflictException("Overlapping leave application exists for the selected date range");
         }
 
         BigDecimal totalDays = calculateTotalDays(dto.fromDate(), dto.toDate(), dto.isHalfDay() != null && dto.isHalfDay(), dto.halfDayType());
         if (totalDays.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new EdusyncException("Selected range has no applicable working days", HttpStatus.BAD_REQUEST);
+            throw new LeaveValidationException("Selected range has no applicable working days");
         }
 
         enforceLeaveTypeRules(leaveType, totalDays, dto.fromDate(), dto.attachmentUrl());
         if (!isLopType(leaveType)) {
             LeaveBalance balance = getOrInitializeBalance(currentStaff, leaveType, academicYearForDate(dto.fromDate()));
             if (balance.getRemaining().compareTo(totalDays) < 0) {
-                throw new EdusyncException("Insufficient leave balance", HttpStatus.BAD_REQUEST);
+                throw new LeaveValidationException("Insufficient leave balance");
             }
         }
 
@@ -147,12 +148,12 @@ public class LeaveManagementServiceImpl implements LeaveManagementService {
     public LeaveApplicationResponseDTO approve(Long applicationId, Long reviewerUserId, LeaveReviewDTO dto) {
         LeaveApplication application = findActiveApplication(applicationId);
         if (application.getStatus() != LeaveApplicationStatus.PENDING) {
-            throw new EdusyncException("Only pending applications can be approved", HttpStatus.BAD_REQUEST);
+            throw new LeaveValidationException("Only pending applications can be approved");
         }
 
         User applicantUser = resolveApplicantUser(application);
         if (applicantUser != null && applicantUser.getId().equals(reviewerUserId)) {
-            throw new EdusyncException("You cannot approve your own leave application", HttpStatus.BAD_REQUEST);
+            throw new LeaveValidationException("You cannot approve your own leave application");
         }
 
         if (leaveApplicationRepository.existsOverlappingExcludingId(
@@ -162,7 +163,7 @@ public class LeaveManagementServiceImpl implements LeaveManagementService {
                 application.getToDate(),
                 Set.of(LeaveApplicationStatus.APPROVED)
         )) {
-            throw new EdusyncException("Conflicting approved leave exists for this date range", HttpStatus.CONFLICT);
+            throw new LeaveConflictException("Conflicting approved leave exists for this date range");
         }
 
         if (!isLopType(application.getLeaveType())) {
@@ -173,7 +174,7 @@ public class LeaveManagementServiceImpl implements LeaveManagementService {
             );
 
             if (balance.getRemaining().compareTo(application.getTotalDays()) < 0) {
-                throw new EdusyncException("Insufficient leave balance at approval time", HttpStatus.BAD_REQUEST);
+                throw new LeaveValidationException("Insufficient leave balance at approval time");
             }
 
             balance.setUsed(balance.getUsed().add(application.getTotalDays()));
@@ -203,12 +204,12 @@ public class LeaveManagementServiceImpl implements LeaveManagementService {
     public LeaveApplicationResponseDTO reject(Long applicationId, Long reviewerUserId, LeaveReviewDTO dto) {
         LeaveApplication application = findActiveApplication(applicationId);
         if (application.getStatus() != LeaveApplicationStatus.PENDING) {
-            throw new EdusyncException("Only pending applications can be rejected", HttpStatus.BAD_REQUEST);
+            throw new LeaveValidationException("Only pending applications can be rejected");
         }
 
         User applicantUser = resolveApplicantUser(application);
         if (applicantUser != null && applicantUser.getId().equals(reviewerUserId)) {
-            throw new EdusyncException("You cannot reject your own leave application", HttpStatus.BAD_REQUEST);
+            throw new LeaveValidationException("You cannot reject your own leave application");
         }
 
         application.setStatus(LeaveApplicationStatus.REJECTED);
@@ -236,16 +237,16 @@ public class LeaveManagementServiceImpl implements LeaveManagementService {
         Staff currentStaff = getCurrentStaff();
 
         if (!application.getStaff().getId().equals(currentStaff.getId())) {
-            throw new EdusyncException("You can only cancel your own leave application", HttpStatus.FORBIDDEN);
+            throw new LeaveAccessDeniedException("You can only cancel your own leave application");
         }
 
         if (application.getStatus() == LeaveApplicationStatus.REJECTED || application.getStatus() == LeaveApplicationStatus.CANCELLED) {
-            throw new EdusyncException("This leave application is already closed", HttpStatus.BAD_REQUEST);
+            throw new LeaveValidationException("This leave application is already closed");
         }
 
         if (application.getStatus() == LeaveApplicationStatus.APPROVED) {
             if (application.getFromDate().isBefore(LocalDate.now())) {
-                throw new EdusyncException("Cannot cancel approved leave after leave period has started", HttpStatus.BAD_REQUEST);
+                throw new LeaveValidationException("Cannot cancel approved leave after leave period has started");
             }
 
             if (!isLopType(application.getLeaveType())) {
@@ -283,7 +284,7 @@ public class LeaveManagementServiceImpl implements LeaveManagementService {
     @Transactional(readOnly = true)
     public List<LeaveBalanceResponseDTO> getBalanceForStaff(Long staffId, String academicYear) {
         Staff staff = staffRepository.findById(staffId)
-                .orElseThrow(() -> new ResourceNotFoundException("Staff not found with id: " + staffId));
+                .orElseThrow(() -> new LeaveNotFoundException("Staff not found with id: " + staffId));
 
         String year = normalizeAcademicYear(academicYear);
         return leaveBalanceRepository.findByStaff_IdAndAcademicYearAndActiveTrueOrderByLeaveType_LeaveCodeAsc(staffId, year)
@@ -373,10 +374,10 @@ public class LeaveManagementServiceImpl implements LeaveManagementService {
 
     private LeaveApplication findActiveApplication(Long applicationId) {
         LeaveApplication application = leaveApplicationRepository.findById(applicationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Leave application not found with id: " + applicationId));
+                .orElseThrow(() -> new LeaveNotFoundException("Leave application not found with id: " + applicationId));
 
         if (!application.isActive()) {
-            throw new ResourceNotFoundException("Leave application not found with id: " + applicationId);
+            throw new LeaveNotFoundException("Leave application not found with id: " + applicationId);
         }
         return application;
     }
@@ -389,17 +390,17 @@ public class LeaveManagementServiceImpl implements LeaveManagementService {
                 "Leave application"
         );
         if (!application.isActive()) {
-            throw new ResourceNotFoundException("Leave application not found with identifier: " + identifier);
+            throw new LeaveNotFoundException("Leave application not found with identifier: " + identifier);
         }
         return application;
     }
 
     private LeaveTypeConfig findActiveLeaveType(Long leaveTypeId) {
         LeaveTypeConfig leaveType = leaveTypeConfigRepository.findById(leaveTypeId)
-                .orElseThrow(() -> new ResourceNotFoundException("Leave type not found with id: " + leaveTypeId));
+                .orElseThrow(() -> new LeaveNotFoundException("Leave type not found with id: " + leaveTypeId));
 
         if (!leaveType.isActive()) {
-            throw new EdusyncException("Selected leave type is inactive", HttpStatus.BAD_REQUEST);
+            throw new LeaveValidationException("Selected leave type is inactive");
         }
         return leaveType;
     }
@@ -413,7 +414,7 @@ public class LeaveManagementServiceImpl implements LeaveManagementService {
         );
 
         if (!leaveType.isActive()) {
-            throw new EdusyncException("Selected leave type is inactive", HttpStatus.BAD_REQUEST);
+            throw new LeaveValidationException("Selected leave type is inactive");
         }
         return leaveType;
     }
@@ -431,14 +432,14 @@ public class LeaveManagementServiceImpl implements LeaveManagementService {
                 "Staff"
         );
         if (!staff.isActive()) {
-            throw new ResourceNotFoundException("Staff not found with identifier: " + identifier);
+            throw new LeaveNotFoundException("Staff not found with identifier: " + identifier);
         }
         return staff;
     }
 
     private Staff resolveStaffByUserId(Long userId) {
         return staffRepository.findByUserProfile_User_Id(userId)
-                .orElseThrow(() -> new EdusyncException("Authenticated user is not linked to a staff profile", HttpStatus.FORBIDDEN));
+                .orElseThrow(() -> new LeaveAccessDeniedException("Authenticated user is not linked to a staff profile"));
     }
 
     private java.util.Optional<Staff> findStaffByUserId(Long userId) {
@@ -474,9 +475,8 @@ public class LeaveManagementServiceImpl implements LeaveManagementService {
         if (isLeaveTypeApplicableToCategory(leaveType, category)) {
             return;
         }
-        throw new EdusyncException(
-                leaveType.getDisplayName() + " is not applicable for " + category + " staff",
-                HttpStatus.BAD_REQUEST
+        throw new LeaveValidationException(
+                leaveType.getDisplayName() + " is not applicable for " + category + " staff"
         );
     }
 
@@ -489,7 +489,7 @@ public class LeaveManagementServiceImpl implements LeaveManagementService {
 
     private void validateDateRange(LocalDate fromDate, LocalDate toDate) {
         if (toDate.isBefore(fromDate)) {
-            throw new EdusyncException("toDate cannot be before fromDate", HttpStatus.BAD_REQUEST);
+            throw new LeaveValidationException("toDate cannot be before fromDate");
         }
     }
 
@@ -500,11 +500,11 @@ public class LeaveManagementServiceImpl implements LeaveManagementService {
         }
 
         if (!dto.fromDate().equals(dto.toDate())) {
-            throw new EdusyncException("Half-day leave must be for a single date", HttpStatus.BAD_REQUEST);
+            throw new LeaveValidationException("Half-day leave must be for a single date");
         }
 
         if (dto.halfDayType() == null) {
-            throw new EdusyncException("halfDayType is required when isHalfDay=true", HttpStatus.BAD_REQUEST);
+            throw new LeaveValidationException("halfDayType is required when isHalfDay=true");
         }
     }
 
@@ -512,7 +512,7 @@ public class LeaveManagementServiceImpl implements LeaveManagementService {
         if (halfDay) {
             DayType dayType = resolveStaffDayType(fromDate, academicYearForDate(fromDate));
             if (dayType == DayType.HOLIDAY || dayType == DayType.RESTRICTED_HOLIDAY || dayType == DayType.VACATION) {
-                throw new EdusyncException("Half-day leave cannot be applied on a holiday", HttpStatus.BAD_REQUEST);
+                throw new LeaveValidationException("Half-day leave cannot be applied on a holiday");
             }
             return BigDecimal.valueOf(0.5).setScale(2, RoundingMode.HALF_UP);
         }
@@ -546,18 +546,18 @@ public class LeaveManagementServiceImpl implements LeaveManagementService {
         if (leaveType.getMinDaysBeforeApply() != null && leaveType.getMinDaysBeforeApply() > 0) {
             long daysInAdvance = java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(), fromDate);
             if (daysInAdvance < leaveType.getMinDaysBeforeApply()) {
-                throw new EdusyncException("Leave must be applied at least " + leaveType.getMinDaysBeforeApply() + " day(s) in advance", HttpStatus.BAD_REQUEST);
+                throw new LeaveValidationException("Leave must be applied at least " + leaveType.getMinDaysBeforeApply() + " day(s) in advance");
             }
         }
 
         if (leaveType.getMaxConsecutiveDays() != null && totalDays.compareTo(BigDecimal.valueOf(leaveType.getMaxConsecutiveDays())) > 0) {
-            throw new EdusyncException("Leave exceeds maximum consecutive days allowed", HttpStatus.BAD_REQUEST);
+            throw new LeaveValidationException("Leave exceeds maximum consecutive days allowed");
         }
 
         if (leaveType.isRequiresDocument()) {
             int requiredAfter = leaveType.getDocumentRequiredAfterDays() == null ? 0 : leaveType.getDocumentRequiredAfterDays();
             if (totalDays.compareTo(BigDecimal.valueOf(requiredAfter)) > 0 && (attachmentUrl == null || attachmentUrl.isBlank())) {
-                throw new EdusyncException("Supporting document is required for this leave request", HttpStatus.BAD_REQUEST);
+                throw new LeaveValidationException("Supporting document is required for this leave request");
             }
         }
     }
@@ -585,18 +585,18 @@ public class LeaveManagementServiceImpl implements LeaveManagementService {
         String raw = academicYear == null || academicYear.isBlank() ? academicYearForDate(LocalDate.now()) : academicYear.trim();
         String[] parts = raw.split("-");
         if (parts.length != 2) {
-            throw new EdusyncException("Invalid academicYear format. Expected YYYY-YYYY", HttpStatus.BAD_REQUEST);
+            throw new LeaveValidationException("Invalid academicYear format. Expected YYYY-YYYY");
         }
 
         try {
             int start = Integer.parseInt(parts[0]);
             int end = Integer.parseInt(parts[1]);
             if (end != start + 1) {
-                throw new EdusyncException("Invalid academicYear format. Expected YYYY-YYYY", HttpStatus.BAD_REQUEST);
+                throw new LeaveValidationException("Invalid academicYear format. Expected YYYY-YYYY");
             }
             return start + "-" + end;
         } catch (NumberFormatException ex) {
-            throw new EdusyncException("Invalid academicYear format. Expected YYYY-YYYY", HttpStatus.BAD_REQUEST);
+            throw new LeaveValidationException("Invalid academicYear format. Expected YYYY-YYYY");
         }
     }
 

@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 
 public interface LeaveApplicationRepository extends JpaRepository<LeaveApplication, Long> {
@@ -104,6 +105,20 @@ public interface LeaveApplicationRepository extends JpaRepository<LeaveApplicati
               AND la.toDate >= :date
             """)
     long countDistinctStaffOnApprovedLeaveByCategoryAndDate(@Param("category") StaffCategory category, @Param("date") LocalDate date);
+
+    @Query("""
+            SELECT la FROM LeaveApplication la
+            WHERE la.active = true
+              AND la.staff.id = :staffId
+              AND la.status = com.project.edusync.hrms.model.enums.LeaveApplicationStatus.APPROVED
+              AND la.fromDate <= :toDate
+              AND la.toDate >= :fromDate
+            """)
+    List<LeaveApplication> findApprovedActiveByStaffIdAndDateRange(
+            @Param("staffId") Long staffId,
+            @Param("fromDate") LocalDate fromDate,
+            @Param("toDate") LocalDate toDate
+    );
 
     Optional<LeaveApplication> findByUuid(java.util.UUID uuid);
 }

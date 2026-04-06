@@ -36,6 +36,8 @@ public class ScheduleResponseDto {
         private String sectionName;
         private String className;
         private RoomBasicResponseDto defaultRoom;
+        private UUID classTeacherUuid;
+        private String classTeacherName;
     }
 
     @Data

@@ -11,13 +11,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.thymeleaf.TemplateEngine;
+import org.thymeleaf.context.Context;
 
 import java.io.ByteArrayOutputStream;
 import java.time.LocalDate;
 import java.time.Month;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 /**
  * Implementation of {@link IdCardService}.
@@ -40,6 +41,7 @@ public class IdCardServiceImpl implements IdCardService {
     private final StaffRepository staffRepository;
     private final PdfGenerationService pdfGenerationService;
     private final AppSettingService appSettingService;
+    private final TemplateEngine templateEngine;
 
 
     private static final Set<String> VALID_TEMPLATES = Set.of("classic", "modern", "minimal");
@@ -92,6 +94,27 @@ public class IdCardServiceImpl implements IdCardService {
         if (staffOpt.isPresent()) {
             Map<String, Object> data = buildStaffCardData(staffOpt.get());
             return pdfGenerationService.generatePdfFromHtml(resolveStaffTemplateName(tmpl), data);
+        }
+
+        throw new ResourceNotFoundException("Student or Staff", "userId", userId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public String generateMyIdCardHtml(Long userId, String template) {
+        String tmpl = resolveTemplate(template);
+        log.info("Generating self-service ID card HTML preview for userId={}, template={}", userId, tmpl);
+
+        Optional<Student> studentOpt = studentRepository.findByUserProfile_User_Id(userId);
+        if (studentOpt.isPresent()) {
+            Map<String, Object> data = buildStudentCardData(studentOpt.get());
+            return renderTemplateToHtml(resolveStudentTemplateName(tmpl), data);
+        }
+
+        Optional<Staff> staffOpt = staffRepository.findByUserProfile_User_Id(userId);
+        if (staffOpt.isPresent()) {
+            Map<String, Object> data = buildStaffCardData(staffOpt.get());
+            return renderTemplateToHtml(resolveStaffTemplateName(tmpl), data);
         }
 
         throw new ResourceNotFoundException("Student or Staff", "userId", userId);
@@ -468,6 +491,12 @@ public class IdCardServiceImpl implements IdCardService {
         // Fall back to the globally designated school ID card template
         String defaultTemplate = appSettingService.getValue("school.id_card_template", "classic").toLowerCase();
         return VALID_TEMPLATES.contains(defaultTemplate) ? defaultTemplate : "classic";
+    }
+
+    private String renderTemplateToHtml(String templateName, Map<String, Object> data) {
+        Context context = new Context();
+        context.setVariables(data);
+        return templateEngine.process(templateName, context);
     }
 
     private String buildFullName(String first, String middle, String last) {

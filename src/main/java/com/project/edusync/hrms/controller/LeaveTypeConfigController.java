@@ -34,7 +34,7 @@ public class LeaveTypeConfigController {
 
     @GetMapping
     @Operation(summary = "Get all leave types")
-    @PreAuthorize("hasAnyAuthority('ROLE_SUPER_ADMIN','ROLE_SCHOOL_ADMIN','ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_SUPER_ADMIN','ROLE_SCHOOL_ADMIN','ROLE_ADMIN','ROLE_PRINCIPAL','ROLE_TEACHER','ROLE_LIBRARIAN')")
     public ResponseEntity<List<LeaveTypeConfigResponseDTO>> getAll(@RequestParam(required = false) StaffCategory category) {
         return ResponseEntity.ok(leaveTypeConfigService.getAll(category));
     }

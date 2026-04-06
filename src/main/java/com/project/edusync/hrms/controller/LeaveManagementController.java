@@ -8,6 +8,7 @@ import com.project.edusync.hrms.dto.leave.LeaveApplicationResponseDTO;
 import com.project.edusync.hrms.dto.leave.LeaveBalanceInitRequestDTO;
 import com.project.edusync.hrms.dto.leave.LeaveBalanceResponseDTO;
 import com.project.edusync.hrms.dto.leave.LeaveReviewDTO;
+import com.project.edusync.hrms.exception.LeaveAccessDeniedException;
 import com.project.edusync.hrms.model.enums.LeaveApplicationStatus;
 import com.project.edusync.hrms.service.LeaveManagementService;
 import com.project.edusync.uis.model.entity.Staff;
@@ -132,7 +133,7 @@ public class LeaveManagementController {
     public ResponseEntity<List<LeaveBalanceResponseDTO>> getMyBalance(@RequestParam(required = false) String academicYear) {
         Long currentUserId = authUtil.getCurrentUserId();
         Long staffId = staffRepository.findByUserProfile_User_Id(currentUserId)
-                .orElseThrow(() -> new com.project.edusync.common.exception.EdusyncException("Authenticated user is not linked to a staff profile", HttpStatus.FORBIDDEN))
+                .orElseThrow(() -> new LeaveAccessDeniedException("Authenticated user is not linked to a staff profile"))
                 .getId();
         return ResponseEntity.ok(leaveManagementService.getBalanceForStaff(staffId, academicYear));
     }

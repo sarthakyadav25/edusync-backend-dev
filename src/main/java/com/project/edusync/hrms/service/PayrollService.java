@@ -4,6 +4,7 @@ import com.project.edusync.hrms.dto.payroll.PayrollRunCreateDTO;
 import com.project.edusync.hrms.dto.payroll.PayrollRunResponseDTO;
 import com.project.edusync.hrms.dto.payroll.PayrollRunSummaryDTO;
 import com.project.edusync.hrms.dto.payroll.PayslipDetailDTO;
+import com.project.edusync.hrms.dto.payroll.StaffAttendanceSummaryDTO;
 import com.project.edusync.hrms.dto.payroll.PayslipSummaryDTO;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -51,6 +52,8 @@ public interface PayrollService {
     PayrollRunResponseDTO getRunById(Long runId);
 
     PayrollRunResponseDTO getRunByIdentifier(String identifier);
+
+    StaffAttendanceSummaryDTO getMyAttendanceSummary(int year, int month);
 }
 
 

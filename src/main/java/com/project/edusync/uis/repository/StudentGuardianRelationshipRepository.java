@@ -28,6 +28,16 @@ public interface StudentGuardianRelationshipRepository extends JpaRepository<Stu
             """)
     List<StudentGuardianRelationship> findAllWithStudentGraphByGuardianIds(@Param("guardianIds") List<Long> guardianIds);
 
+    @Query("""
+            SELECT sgr
+            FROM StudentGuardianRelationship sgr
+            JOIN FETCH sgr.guardian g
+            JOIN FETCH g.userProfile gp
+            WHERE sgr.student.id IN :studentIds
+              AND sgr.isPrimaryContact = true
+            """)
+    List<StudentGuardianRelationship> findPrimaryContactsByStudentIds(@Param("studentIds") List<Long> studentIds);
+
     void deleteByStudentAndGuardian(Student student, Guardian guardian);
 }
 

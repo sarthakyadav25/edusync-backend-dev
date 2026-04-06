@@ -78,5 +78,6 @@ public class StaffSalaryMappingController {
     public ResponseEntity<ComputedSalaryBreakdownDTO> computed(@PathVariable String identifier) {
         return ResponseEntity.ok(staffSalaryMappingService.computeBreakdownByIdentifier(identifier));
     }
+
 }
 

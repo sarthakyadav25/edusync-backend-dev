@@ -10,8 +10,10 @@ import com.project.edusync.hrms.dto.payroll.PayrollRunSummaryDTO;
 import com.project.edusync.hrms.dto.payroll.PayslipDetailDTO;
 import com.project.edusync.hrms.dto.payroll.PayslipLineItemDTO;
 import com.project.edusync.hrms.dto.payroll.PayslipSummaryDTO;
+import com.project.edusync.hrms.dto.payroll.StaffAttendanceSummaryDTO;
 import com.project.edusync.hrms.dto.salary.ComputedComponentDTO;
 import com.project.edusync.hrms.dto.salary.ComputedSalaryBreakdownDTO;
+import com.project.edusync.hrms.model.entity.LeaveApplication;
 import com.project.edusync.hrms.model.entity.Payslip;
 import com.project.edusync.hrms.model.entity.PayslipLineItem;
 import com.project.edusync.hrms.model.entity.AcademicCalendarEvent;
@@ -21,6 +23,7 @@ import com.project.edusync.hrms.model.entity.StaffSalaryMapping;
 import com.project.edusync.hrms.model.enums.PayrollRunStatus;
 import com.project.edusync.hrms.model.enums.DayType;
 import com.project.edusync.hrms.model.enums.SalaryComponentType;
+import com.project.edusync.ams.model.entity.StaffDailyAttendance;
 import com.project.edusync.hrms.repository.AcademicCalendarEventRepository;
 import com.project.edusync.hrms.repository.LeaveApplicationRepository;
 import com.project.edusync.hrms.repository.PayslipLineItemRepository;
@@ -47,12 +50,17 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.DayOfWeek;
+import java.time.Month;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.HashSet;
 import java.util.Map;
 import java.math.RoundingMode;
+import java.util.Locale;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -312,6 +320,114 @@ public class PayrollServiceImpl implements PayrollService {
         data.put("payslip", payslip);
         data.put("generatedOn", LocalDateTime.now());
         return pdfGenerationService.generatePdfFromHtml("hrms/payslip", data);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public StaffAttendanceSummaryDTO getMyAttendanceSummary(int year, int month) {
+        if (month < 1 || month > 12) {
+            throw new EdusyncException("Month must be between 1 and 12", HttpStatus.BAD_REQUEST);
+        }
+
+        Long staffId = resolveCurrentStaffId();
+        YearMonth yearMonth = YearMonth.of(year, month);
+        LocalDate start = yearMonth.atDay(1);
+        LocalDate end = yearMonth.atEndOfMonth();
+        String academicYear = academicYearForDate(start);
+
+        List<AcademicCalendarEvent> events = academicCalendarEventRepository
+                .findByAcademicYearAndDateBetweenAndIsActiveTrueOrderByDateAsc(academicYear, start, end);
+        Map<LocalDate, DayType> dayTypeByDate = new HashMap<>();
+        for (AcademicCalendarEvent event : events) {
+            if (event.isAppliesToStaff()) {
+                dayTypeByDate.put(event.getDate(), event.getDayType());
+            }
+        }
+
+        List<StaffDailyAttendance> attendanceRecords = staffDailyAttendanceRepository
+                .findByStaffIdAndAttendanceDateBetweenOrderByAttendanceDateDesc(staffId, start, end);
+        Map<LocalDate, StaffDailyAttendance> attendanceByDate = new HashMap<>();
+        for (StaffDailyAttendance record : attendanceRecords) {
+            attendanceByDate.put(record.getAttendanceDate(), record);
+        }
+
+        List<LeaveApplication> approvedLeaves = leaveApplicationRepository.findApprovedActiveByStaffIdAndDateRange(staffId, start, end);
+        Set<LocalDate> leaveDates = new HashSet<>();
+        for (LeaveApplication leave : approvedLeaves) {
+            LocalDate cursor = leave.getFromDate().isBefore(start) ? start : leave.getFromDate();
+            LocalDate stop = leave.getToDate().isAfter(end) ? end : leave.getToDate();
+            while (!cursor.isAfter(stop)) {
+                leaveDates.add(cursor);
+                cursor = cursor.plusDays(1);
+            }
+        }
+
+        int presentDays = 0;
+        int absentDays = 0;
+        int leaveDays = 0;
+        int holidays = 0;
+        List<StaffAttendanceSummaryDTO.DayRecord> dailyRecords = new ArrayList<>();
+
+        LocalDate cursor = start;
+        while (!cursor.isAfter(end)) {
+            DayType dayType = dayTypeByDate.get(cursor);
+            boolean weekend = cursor.getDayOfWeek() == DayOfWeek.SATURDAY || cursor.getDayOfWeek() == DayOfWeek.SUNDAY;
+            boolean holiday = isHoliday(dayType, weekend);
+
+            String status;
+            StaffDailyAttendance attendance = attendanceByDate.get(cursor);
+            if (attendance != null && attendance.getAttendanceType() != null) {
+                if (attendance.getAttendanceType().isPresentMark()) {
+                    status = "PRESENT";
+                    presentDays++;
+                } else if (attendance.getAttendanceType().isAbsenceMark()) {
+                    status = "ABSENT";
+                    absentDays++;
+                } else {
+                    status = holiday ? (weekend && dayType == null ? "WEEKEND" : "HOLIDAY") : "ABSENT";
+                    if (holiday) {
+                        holidays++;
+                    } else {
+                        absentDays++;
+                    }
+                }
+            } else if (leaveDates.contains(cursor)) {
+                status = "LEAVE";
+                leaveDays++;
+            } else if (holiday) {
+                status = weekend && dayType == null ? "WEEKEND" : "HOLIDAY";
+                holidays++;
+            } else {
+                status = "ABSENT";
+                absentDays++;
+            }
+
+            dailyRecords.add(StaffAttendanceSummaryDTO.DayRecord.builder()
+                    .date(cursor)
+                    .status(status)
+                    .build());
+            cursor = cursor.plusDays(1);
+        }
+
+        int totalDays = yearMonth.lengthOfMonth();
+        int workingDays = Math.max(totalDays - holidays, 0);
+        BigDecimal percentage = workingDays == 0
+                ? BigDecimal.ZERO
+                : BigDecimal.valueOf(presentDays)
+                .multiply(BigDecimal.valueOf(100))
+                .divide(BigDecimal.valueOf(workingDays), 1, RoundingMode.HALF_UP);
+
+        String periodLabel = Month.of(month).getDisplayName(java.time.format.TextStyle.FULL, Locale.ENGLISH) + " " + year;
+        return StaffAttendanceSummaryDTO.builder()
+                .periodLabel(periodLabel)
+                .totalDays(totalDays)
+                .presentDays(presentDays)
+                .absentDays(absentDays)
+                .leaveDays(leaveDays)
+                .holidays(holidays)
+                .attendancePercentage(percentage)
+                .dailyRecords(dailyRecords)
+                .build();
     }
 
     private PayslipDetailDTO toPayslipDetail(Payslip payslip) {
@@ -656,6 +772,15 @@ public class PayrollServiceImpl implements PayrollService {
             return normalized;
         }
         return POLICY_TREAT_UNMARKED_AS_ABSENT;
+    }
+
+    private boolean isHoliday(DayType dayType, boolean weekend) {
+        if (dayType != null) {
+            return dayType == DayType.HOLIDAY
+                    || dayType == DayType.VACATION
+                    || dayType == DayType.RESTRICTED_HOLIDAY;
+        }
+        return weekend;
     }
 
     private record AttendanceMetrics(int presentDays, int absentDays) {

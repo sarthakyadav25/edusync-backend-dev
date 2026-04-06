@@ -30,5 +30,7 @@ public interface StaffSalaryMappingService {
     ComputedSalaryBreakdownDTO computeBreakdown(Long mappingId);
 
     ComputedSalaryBreakdownDTO computeBreakdownByIdentifier(String identifier);
+
+    ComputedSalaryBreakdownDTO getMyComputedBreakdown();
 }
 
