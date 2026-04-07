@@ -13,4 +13,6 @@ import java.util.UUID;
 public interface LectureLogRepository extends JpaRepository<LectureLog, Long> {
     Optional<LectureLog> findByScheduleUuidAndTeacherId(UUID scheduleUuid, Integer teacherId);
     Optional<LectureLog> findByScheduleAndTeacher(Schedule schedule, User teacher);
+    /** Used by students to read a log without ownership check. */
+    Optional<LectureLog> findByScheduleUuid(UUID scheduleUuid);
 }

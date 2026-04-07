@@ -49,6 +49,12 @@ public class LectureLogServiceImpl implements LectureLogService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public java.util.Optional<LectureLogResponseDto> getLectureLogByScheduleUuid(UUID scheduleUuid) {
+        return lectureLogRepository.findByScheduleUuid(scheduleUuid).map(this::toDto);
+    }
+
+    @Override
     @Transactional
     public LectureLogResponseDto saveLectureLog(Long teacherId, LectureLogRequestDto requestDto) {
         User teacher = userRepository.findById(teacherId.intValue())
