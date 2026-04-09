@@ -1,7 +1,9 @@
 package com.project.edusync.em.model.entity;
 
 import com.project.edusync.common.model.AuditableEntity;
+import com.project.edusync.em.model.enums.EvaluationAssignmentRole;
 import com.project.edusync.em.model.enums.EvaluationAssignmentStatus;
+import com.project.edusync.em.model.enums.UploadStatus;
 import com.project.edusync.uis.model.entity.Staff;
 import jakarta.persistence.*;
 import lombok.*;
@@ -11,7 +13,9 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "evaluation_assignments", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"schedule_id", "teacher_id"})
+        @UniqueConstraint(
+                name = "uq_eval_assign_schedule_teacher_role",
+                columnNames = {"schedule_id", "teacher_id", "role"})
 })
 @Getter
 @Setter
@@ -31,7 +35,15 @@ public class EvaluationAssignment extends AuditableEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
+    private EvaluationAssignmentRole role = EvaluationAssignmentRole.EVALUATOR;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
     private EvaluationAssignmentStatus status = EvaluationAssignmentStatus.ASSIGNED;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "upload_status", length = 20)
+    private UploadStatus uploadStatus;
 
     @Column(name = "assigned_at", nullable = false)
     private LocalDateTime assignedAt;
@@ -46,4 +58,3 @@ public class EvaluationAssignment extends AuditableEntity {
         }
     }
 }
-

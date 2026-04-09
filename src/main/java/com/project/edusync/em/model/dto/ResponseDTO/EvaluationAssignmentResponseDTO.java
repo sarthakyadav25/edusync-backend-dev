@@ -19,8 +19,9 @@ public class EvaluationAssignmentResponseDTO {
     private LocalDate examDate;
     private UUID teacherId;
     private String teacherName;
+    private String role;           // "UPLOADER" or "EVALUATOR"
     private EvaluationAssignmentStatus status;
+    private String uploadStatus;   // null, "NOT_STARTED", "IN_PROGRESS", "COMPLETED"
     private LocalDateTime assignedAt;
     private LocalDate dueDate;
 }
-

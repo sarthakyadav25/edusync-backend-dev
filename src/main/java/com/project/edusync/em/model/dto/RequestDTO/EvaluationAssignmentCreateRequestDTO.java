@@ -1,5 +1,6 @@
 package com.project.edusync.em.model.dto.RequestDTO;
 
+import com.project.edusync.em.model.enums.EvaluationAssignmentRole;
 import jakarta.validation.constraints.FutureOrPresent;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -17,5 +18,8 @@ public class EvaluationAssignmentCreateRequestDTO {
 
     @FutureOrPresent(message = "dueDate must be today or a future date")
     private LocalDate dueDate;
+
+    /** UPLOADER or EVALUATOR — defaults to EVALUATOR if null */
+    private EvaluationAssignmentRole role;
 }
 

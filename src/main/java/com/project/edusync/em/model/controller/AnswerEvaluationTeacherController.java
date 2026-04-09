@@ -81,6 +81,12 @@ public class AnswerEvaluationTeacherController {
         return ResponseEntity.ok(answerEvaluationService.completeImageUpload(scheduleId, studentId));
     }
 
+    @PostMapping("/evaluation/{scheduleId}/upload-complete")
+    public ResponseEntity<EvaluationAssignmentResponseDTO> markScheduleUploadComplete(
+            @PathVariable Long scheduleId) {
+        return ResponseEntity.ok(answerEvaluationService.markScheduleUploadComplete(scheduleId));
+    }
+
     @GetMapping("/evaluation/{answerSheetId}/structure")
     public ResponseEntity<AnswerEvaluationStructureResponseDTO> getEvaluationStructure(@PathVariable Long answerSheetId) {
         return ResponseEntity.ok(answerEvaluationService.getEvaluationStructure(answerSheetId));
@@ -93,9 +99,14 @@ public class AnswerEvaluationTeacherController {
         return ResponseEntity.ok(answerEvaluationService.saveDraftMarks(answerSheetId, requestDTO));
     }
 
+    @PostMapping("/evaluation/{answerSheetId}/submit")
+    public ResponseEntity<EvaluationResultResponseDTO> submitMarks(@PathVariable Long answerSheetId) {
+        return ResponseEntity.ok(answerEvaluationService.submitMarks(answerSheetId));
+    }
+
     @PostMapping("/evaluation/{answerSheetId}/publish")
-    public ResponseEntity<EvaluationResultResponseDTO> publishMarks(@PathVariable Long answerSheetId) {
-        return ResponseEntity.ok(answerEvaluationService.publishMarks(answerSheetId));
+    public ResponseEntity<EvaluationResultResponseDTO> publishAlias(@PathVariable Long answerSheetId) {
+        return ResponseEntity.ok(answerEvaluationService.submitMarks(answerSheetId));
     }
 
     @PostMapping("/answer-sheets/{id}/annotations")

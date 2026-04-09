@@ -32,5 +32,11 @@ public class AnswerEvaluationAdminController {
             @RequestParam(required = false) UUID teacherId) {
         return ResponseEntity.ok(answerEvaluationService.getAssignmentsForAdmin(teacherId));
     }
+
+    @DeleteMapping("/assignments/{assignmentId}")
+    public ResponseEntity<Void> deleteAssignment(@PathVariable Long assignmentId) {
+        answerEvaluationService.deleteAssignment(assignmentId);
+        return ResponseEntity.noContent().build();
+    }
 }
 
