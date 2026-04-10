@@ -1,8 +1,12 @@
 package com.project.edusync.ams.model.controller;
 
 import com.project.edusync.ams.model.dto.request.StaffAttendanceRequestDTO;
+import com.project.edusync.ams.model.dto.response.AttendanceCompletionDTO;
+import com.project.edusync.ams.model.dto.response.StaffDailyStatsResponseDTO;
 import com.project.edusync.ams.model.dto.response.StaffAttendanceResponseDTO;
 import com.project.edusync.ams.model.service.StaffAttendanceService;
+import com.project.edusync.uis.model.dto.admin.StaffSummaryDTO;
+import com.project.edusync.uis.model.enums.StaffCategory;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -59,7 +63,11 @@ public class StaffAttendanceController {
             @RequestParam(value = "sort", defaultValue = "createdAt,desc") String sort,
             @Parameter(description = "Filter by staff UUID", schema = @Schema(format = "uuid"))
             @RequestParam(value = "staffUuid", required = false) UUID staffUuid,
-            @RequestParam(value = "date", required = false) String dateStr) {
+            @RequestParam(value = "date", required = false) String dateStr,
+            @RequestParam(value = "fromDate", required = false) String fromDateStr,
+            @RequestParam(value = "toDate", required = false) String toDateStr,
+            @RequestParam(value = "status", required = false) String status,
+            @RequestParam(value = "search", required = false) String search) {
 
         String[] sortParts = sort.split(",");
         Sort s = sortParts.length >= 2
@@ -68,8 +76,37 @@ public class StaffAttendanceController {
 
         Pageable pageable = PageRequest.of(page, size, s);
         Optional<LocalDate> date = Optional.ofNullable(dateStr).filter(s1 -> !s1.isBlank()).map(LocalDate::parse);
+        Optional<LocalDate> fromDate = Optional.ofNullable(fromDateStr).filter(s1 -> !s1.isBlank()).map(LocalDate::parse);
+        Optional<LocalDate> toDate = Optional.ofNullable(toDateStr).filter(s1 -> !s1.isBlank()).map(LocalDate::parse);
 
-        return ResponseEntity.ok(service.listAttendances(pageable, Optional.ofNullable(staffUuid), date));
+        Optional<String> statusFilter = Optional.ofNullable(status).map(String::trim).filter(s1 -> !s1.isBlank());
+        Optional<String> searchFilter = Optional.ofNullable(search).map(String::trim).filter(s1 -> !s1.isBlank());
+
+        return ResponseEntity.ok(service.listAttendances(pageable, Optional.ofNullable(staffUuid), date, fromDate, toDate, statusFilter, searchFilter));
+    }
+
+    @GetMapping("/stats/daily")
+    @Operation(summary = "Get organization-wide daily staff attendance stats")
+    public ResponseEntity<StaffDailyStatsResponseDTO> getDailyStats(
+            @RequestParam(value = "date", required = false) String dateStr) {
+        Optional<LocalDate> date = Optional.ofNullable(dateStr).filter(s1 -> !s1.isBlank()).map(LocalDate::parse);
+        return ResponseEntity.ok(service.getDailyStats(date));
+    }
+
+    @GetMapping("/attendance-completion")
+    @Operation(summary = "Get monthly staff attendance completion stats")
+    public ResponseEntity<AttendanceCompletionDTO> getAttendanceCompletion(
+            @RequestParam("month") int month,
+            @RequestParam("year") int year) {
+        return ResponseEntity.ok(service.getAttendanceCompletion(month, year));
+    }
+
+    @GetMapping("/unmarked")
+    @Operation(summary = "List staff with unmarked attendance for a date")
+    public ResponseEntity<List<StaffSummaryDTO>> getUnmarkedStaff(
+            @RequestParam("date") String date,
+            @RequestParam(value = "category", required = false) StaffCategory category) {
+        return ResponseEntity.ok(service.getUnmarkedStaff(LocalDate.parse(date), Optional.ofNullable(category)));
     }
 
     @GetMapping("/{recordUuid}")

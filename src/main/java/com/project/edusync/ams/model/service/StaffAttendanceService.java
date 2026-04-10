@@ -1,7 +1,11 @@
 package com.project.edusync.ams.model.service;
 
 import com.project.edusync.ams.model.dto.request.StaffAttendanceRequestDTO;
+import com.project.edusync.ams.model.dto.response.AttendanceCompletionDTO;
+import com.project.edusync.ams.model.dto.response.StaffDailyStatsResponseDTO;
 import com.project.edusync.ams.model.dto.response.StaffAttendanceResponseDTO;
+import com.project.edusync.uis.model.dto.admin.StaffSummaryDTO;
+import com.project.edusync.uis.model.enums.StaffCategory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -18,11 +22,21 @@ public interface StaffAttendanceService {
 
     Page<StaffAttendanceResponseDTO> listAttendances(Pageable pageable,
                                                      Optional<UUID> staffUuid,
-                                                     Optional<LocalDate> date);
+                                                     Optional<LocalDate> date,
+                                                     Optional<LocalDate> fromDate,
+                                                     Optional<LocalDate> toDate,
+                                                     Optional<String> status,
+                                                     Optional<String> search);
+
+    StaffDailyStatsResponseDTO getDailyStats(Optional<LocalDate> date);
 
     StaffAttendanceResponseDTO getAttendance(UUID recordUuid);
 
     StaffAttendanceResponseDTO updateAttendance(UUID recordUuid, StaffAttendanceRequestDTO request, Long performedBy);
 
     void deleteAttendance(UUID recordUuid, Long performedBy);
+
+    AttendanceCompletionDTO getAttendanceCompletion(int month, int year);
+
+    List<StaffSummaryDTO> getUnmarkedStaff(LocalDate date, Optional<StaffCategory> category);
 }
