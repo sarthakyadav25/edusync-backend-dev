@@ -25,8 +25,29 @@ public class GeoFenceValidator {
     private final AppSettingService appSettingService;
     private final StaffRepository staffRepository;
 
+    /**
+     * Lenient verifier used by createAttendance: when coordinates are present,
+     * compute proximity server-side and set geoVerified accordingly.
+     */
+    public boolean verifyByCoordinatesIfPresent(Double latitude, Double longitude) {
+        if (latitude == null || longitude == null) {
+            return false;
+        }
+
+        Optional<Double> schoolLat = parseSettingAsDoubleSafely(GEOFENCE_LAT_KEY);
+        Optional<Double> schoolLng = parseSettingAsDoubleSafely(GEOFENCE_LNG_KEY);
+        Optional<Integer> radius = parseSettingAsIntSafely(GEOFENCE_RADIUS_KEY);
+
+        if (schoolLat.isEmpty() || schoolLng.isEmpty() || radius.isEmpty()) {
+            return false;
+        }
+
+        double distance = haversineMeters(latitude, longitude, schoolLat.get(), schoolLng.get());
+        return distance <= radius.get();
+    }
+
     public boolean validateAndResolveGeoVerified(StaffAttendanceRequestDTO request, Long performedByUserId, Long targetStaffId) {
-        boolean geofenceEnabled = appSettingService.getBooleanValue(GEOFENCE_ENABLED_KEY, true);
+        boolean geofenceEnabled = appSettingService.getBooleanValue(GEOFENCE_ENABLED_KEY, false);
         if (!geofenceEnabled) {
             return false;
         }
@@ -98,6 +119,30 @@ public class GeoFenceValidator {
             return Double.parseDouble(raw);
         } catch (NumberFormatException ex) {
             throw new AttendanceProcessingException("Invalid geo-fence setting for key: " + key);
+        }
+    }
+
+    private Optional<Double> parseSettingAsDoubleSafely(String key) {
+        String raw = appSettingService.getValue(key, "").trim();
+        if (raw.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(Double.parseDouble(raw));
+        } catch (NumberFormatException ex) {
+            return Optional.empty();
+        }
+    }
+
+    private Optional<Integer> parseSettingAsIntSafely(String key) {
+        String raw = appSettingService.getValue(key, "").trim();
+        if (raw.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(Integer.parseInt(raw));
+        } catch (NumberFormatException ex) {
+            return Optional.empty();
         }
     }
 }
