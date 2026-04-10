@@ -5,6 +5,9 @@ package com.project.edusync.ams.model.enums;
  */
 public enum AttendanceSource {
     MANUAL,
+    WEB,
+    MOBILE,
+    SELF_CAPTURE,
     BIOMETRIC,
     SYSTEM // e.g., automatically marked based on a timetable
 }

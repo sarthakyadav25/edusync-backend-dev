@@ -46,4 +46,19 @@ public class StaffDailyAttendance extends AuditableEntity {
 
     @Column(columnDefinition = "TEXT")
     private String notes;
+
+    @Column(name = "latitude")
+    private Double latitude;
+
+    @Column(name = "longitude")
+    private Double longitude;
+
+    @Column(name = "geo_verified")
+    private Boolean geoVerified = false;
+
+    @Column(name = "early_leave")
+    private Boolean earlyLeave = false;
+
+    @Column(name = "early_out_minutes")
+    private Integer earlyOutMinutes;
 }
