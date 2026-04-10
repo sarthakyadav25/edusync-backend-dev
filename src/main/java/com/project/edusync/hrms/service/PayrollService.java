@@ -1,6 +1,7 @@
 package com.project.edusync.hrms.service;
 
 import com.project.edusync.hrms.dto.payroll.PayrollRunCreateDTO;
+import com.project.edusync.hrms.dto.payroll.PayrollPreflightDTO;
 import com.project.edusync.hrms.dto.payroll.PayrollRunResponseDTO;
 import com.project.edusync.hrms.dto.payroll.PayrollRunSummaryDTO;
 import com.project.edusync.hrms.dto.payroll.PayslipDetailDTO;
@@ -54,6 +55,8 @@ public interface PayrollService {
     PayrollRunResponseDTO getRunByIdentifier(String identifier);
 
     StaffAttendanceSummaryDTO getMyAttendanceSummary(int year, int month);
+
+    PayrollPreflightDTO getPayrollPreflight(int year, int month);
 }
 
 

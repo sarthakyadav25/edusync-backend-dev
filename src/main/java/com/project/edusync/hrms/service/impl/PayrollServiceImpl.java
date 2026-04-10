@@ -3,6 +3,9 @@ package com.project.edusync.hrms.service.impl;
 import com.project.edusync.common.exception.EdusyncException;
 import com.project.edusync.common.exception.ResourceNotFoundException;
 import com.project.edusync.common.utils.PublicIdentifierResolver;
+import com.project.edusync.ams.model.dto.response.AttendanceCompletionDTO;
+import com.project.edusync.ams.model.service.StaffAttendanceService;
+import com.project.edusync.hrms.dto.payroll.PayrollPreflightDTO;
 import com.project.edusync.hrms.dto.payroll.PayrollRunCreateDTO;
 import com.project.edusync.hrms.dto.payroll.PayrollRunEntryResponseDTO;
 import com.project.edusync.hrms.dto.payroll.PayrollRunResponseDTO;
@@ -21,6 +24,7 @@ import com.project.edusync.hrms.model.entity.PayrollEntry;
 import com.project.edusync.hrms.model.entity.PayrollRun;
 import com.project.edusync.hrms.model.entity.StaffSalaryMapping;
 import com.project.edusync.hrms.model.enums.PayrollRunStatus;
+import com.project.edusync.hrms.model.enums.LeaveApplicationStatus;
 import com.project.edusync.hrms.model.enums.DayType;
 import com.project.edusync.hrms.model.enums.SalaryComponentType;
 import com.project.edusync.ams.model.entity.StaffDailyAttendance;
@@ -82,6 +86,7 @@ public class PayrollServiceImpl implements PayrollService {
     private final AuthUtil authUtil;
     private final StaffRepository staffRepository;
     private final StaffDailyAttendanceRepository staffDailyAttendanceRepository;
+    private final StaffAttendanceService staffAttendanceService;
 
     @Value("${app.hrms.payroll.attendance.partial-mark-policy:TREAT_UNMARKED_AS_ABSENT}")
     private String partialMarkPolicy;
@@ -89,6 +94,11 @@ public class PayrollServiceImpl implements PayrollService {
     @Override
     @Transactional
     public PayrollRunResponseDTO createRun(PayrollRunCreateDTO dto) {
+        PayrollPreflightDTO preflight = getPayrollPreflight(dto.payYear(), dto.payMonth());
+        if (!preflight.canProcess()) {
+            throw new EdusyncException("Payroll preflight failed: " + preflight.blockers(), HttpStatus.BAD_REQUEST);
+        }
+
         if (payrollRunRepository.existsByPayYearAndPayMonthAndActiveTrue(dto.payYear(), dto.payMonth())) {
             throw new EdusyncException("Payroll run already exists for the selected month", HttpStatus.CONFLICT);
         }
@@ -427,6 +437,72 @@ public class PayrollServiceImpl implements PayrollService {
                 .holidays(holidays)
                 .attendancePercentage(percentage)
                 .dailyRecords(dailyRecords)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PayrollPreflightDTO getPayrollPreflight(int year, int month) {
+        if (month < 1 || month > 12) {
+            throw new EdusyncException("Month must be between 1 and 12", HttpStatus.BAD_REQUEST);
+        }
+
+        AttendanceCompletionDTO completion = staffAttendanceService.getAttendanceCompletion(month, year);
+
+        boolean attendanceComplete = completion.completionPercentage() >= 100.0;
+        List<PayrollPreflightDTO.PayrollBlockerDTO> blockers = new ArrayList<>();
+        if (!attendanceComplete) {
+            List<Map<String, Object>> unmarked = completion.unmarkedStaff().stream()
+                    .map(s -> {
+                        Map<String, Object> item = new LinkedHashMap<>();
+                        item.put("staffName", s.staffName());
+                        item.put("employeeId", s.employeeId());
+                        item.put("missingDays", s.missingDates() == null ? 0 : s.missingDates().size());
+                        return item;
+                    })
+                    .toList();
+
+            blockers.add(PayrollPreflightDTO.PayrollBlockerDTO.builder()
+                    .type("INCOMPLETE_ATTENDANCE")
+                    .message(completion.unmarkedStaff().size() + " staff members have unmarked attendance")
+                    .details(Map.of(
+                            "totalActiveStaff", completion.totalActiveStaff(),
+                            "totalWorkingDays", completion.totalWorkingDays(),
+                            "completionPercentage", completion.completionPercentage(),
+                            "unmarkedStaff", unmarked
+                    ))
+                    .build());
+        }
+
+        int pendingLeaves = (int) leaveApplicationRepository.countByActiveTrueAndStatus(LeaveApplicationStatus.PENDING);
+        List<PayrollPreflightDTO.PayrollWarningDTO> warnings = pendingLeaves > 0
+                ? List.of(PayrollPreflightDTO.PayrollWarningDTO.builder()
+                .type("PENDING_LEAVE_APPLICATIONS")
+                .message(pendingLeaves + " leave applications are still pending approval")
+                .count(pendingLeaves)
+                .build())
+                : List.of();
+
+        LocalDate snapshotDate = YearMonth.of(year, month).atEndOfMonth();
+        long totalStaff = staffRepository.countByIsActiveTrue();
+        long withSalary = staffSalaryMappingRepository.countDistinctStaffWithActiveMappingOnDate(snapshotDate, LocalDate.of(9999, 12, 31));
+
+        PayrollPreflightDTO.PayrollPreflightSummaryDTO summary = PayrollPreflightDTO.PayrollPreflightSummaryDTO.builder()
+                .totalStaff(totalStaff)
+                .staffWithSalaryMapping(withSalary)
+                .staffWithoutSalaryMapping(Math.max(totalStaff - withSalary, 0))
+                .totalApprovedLeaves(leaveApplicationRepository.countByActiveTrueAndStatus(LeaveApplicationStatus.APPROVED))
+                .totalLopDays(0)
+                .attendanceCompletionPercent(completion.completionPercentage())
+                .build();
+
+        return PayrollPreflightDTO.builder()
+                .month(month)
+                .year(year)
+                .canProcess(attendanceComplete)
+                .blockers(blockers)
+                .warnings(warnings)
+                .summary(summary)
                 .build();
     }
 
