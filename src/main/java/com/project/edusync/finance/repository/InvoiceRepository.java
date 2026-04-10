@@ -100,4 +100,12 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
             "WHERE i.status = 'OVERDUE' " +
             "AND i.student.id = :studentId")
     BigDecimal findTotalOverdueForStudent(@Param("studentId") Long studentId);
+
+    @Query("""
+            SELECT COALESCE(SUM(i.totalAmount), 0)
+            FROM Invoice i
+            WHERE YEAR(i.issueDate) = :year
+              AND MONTH(i.issueDate) = :month
+            """)
+    BigDecimal sumExpectedByIssueYearMonth(@Param("year") int year, @Param("month") int month);
 }

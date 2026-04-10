@@ -14,6 +14,8 @@ import com.project.edusync.finance.model.enums.PaymentStatus;
 import com.project.edusync.finance.repository.InvoiceRepository;
 import com.project.edusync.finance.repository.PaymentRepository;
 import com.project.edusync.finance.service.PaymentService;
+import com.project.edusync.dashboard.model.DashboardEvent;
+import com.project.edusync.dashboard.service.DashboardEventService;
 import com.project.edusync.uis.model.entity.Student;
 import com.project.edusync.uis.repository.StudentRepository;
 import com.razorpay.Order;
@@ -44,6 +46,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final PaymentMapper paymentMapper;
     private final ModelMapper modelMapper; // We keep it for other future methods
     private final RazorpayClient razorpayClient;
+    private final DashboardEventService dashboardEventService;
 
     @Value("${app.razorpay.key-id}")
     private String razorpayKeyId;
@@ -105,6 +108,16 @@ public class PaymentServiceImpl implements PaymentService {
         // 5. Save both entities in the transaction
         invoiceRepository.save(invoice);
         Payment savedPayment = paymentRepository.save(payment);
+
+        // Emit dashboard event
+        DashboardEvent event = DashboardEvent.builder()
+                .type("finance")
+                .severity("info")
+                .title("Offline Payment Collected")
+                .message("₹" + createDTO.getAmountPaid() + " collected from " + student.getUserProfile().getFirstName() + " for invoice #" + invoice.getId())
+                .metadata(java.util.Map.of("invoiceId", invoice.getId(), "studentId", student.getId(), "amount", createDTO.getAmountPaid(), "status", "SUCCESS"))
+                .build();
+        dashboardEventService.pushEvent(event);
 
         // 6. Return the DTO for the new payment
         return paymentMapper.toDto(savedPayment);
@@ -248,6 +261,15 @@ public class PaymentServiceImpl implements PaymentService {
 
         invoiceRepository.save(invoice);
         Payment savedPayment = paymentRepository.save(payment);
+
+        DashboardEvent event = DashboardEvent.builder()
+                .type("finance")
+                .severity("info")
+                .title("Online Payment Verified")
+                .message("₹" + payment.getAmountPaid() + " verified online for invoice #" + invoice.getId())
+                .metadata(java.util.Map.of("invoiceId", invoice.getId(), "transactionId", verifyDTO.getGatewayTransactionId(), "amount", payment.getAmountPaid(), "status", "SUCCESS"))
+                .build();
+        dashboardEventService.pushEvent(event);
 
         return paymentMapper.toDto(savedPayment);
     }
