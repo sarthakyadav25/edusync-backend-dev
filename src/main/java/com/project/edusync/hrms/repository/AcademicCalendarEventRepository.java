@@ -1,9 +1,11 @@
 package com.project.edusync.hrms.repository;
 
 import com.project.edusync.hrms.model.entity.AcademicCalendarEvent;
+import com.project.edusync.hrms.model.enums.DayType;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -24,6 +26,12 @@ public interface AcademicCalendarEventRepository extends JpaRepository<AcademicC
     boolean existsByAcademicYearAndDateAndIsActiveTrue(String academicYear, LocalDate date);
 
     boolean existsByAcademicYearAndDateAndIsActiveTrueAndIdNot(String academicYear, LocalDate date, Long id);
+
+    boolean existsByDateAndDayTypeAndAppliesToStaffTrueAndIsActiveTrue(LocalDate date, DayType dayType);
+
+    boolean existsByDateAndDayTypeInAndAppliesToStaffTrueAndIsActiveTrue(LocalDate date, Collection<DayType> dayTypes);
+
+    boolean existsByDateAndDayTypeInAndAppliesToStudentsTrueAndIsActiveTrue(LocalDate date, Collection<DayType> dayTypes);
 
     Optional<AcademicCalendarEvent> findByUuid(java.util.UUID uuid);
 }

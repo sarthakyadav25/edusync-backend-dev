@@ -23,6 +23,8 @@ import com.project.edusync.hrms.repository.LeaveApplicationRepository;
 import com.project.edusync.hrms.repository.LeaveBalanceRepository;
 import com.project.edusync.hrms.repository.LeaveTypeConfigRepository;
 import com.project.edusync.hrms.service.LeaveManagementService;
+import com.project.edusync.dashboard.model.DashboardEvent;
+import com.project.edusync.dashboard.service.DashboardEventService;
 import com.project.edusync.iam.model.entity.User;
 import com.project.edusync.uis.model.entity.Staff;
 import com.project.edusync.uis.model.enums.StaffCategory;
@@ -57,6 +59,7 @@ public class LeaveManagementServiceImpl implements LeaveManagementService {
     private final LeaveTypeConfigRepository leaveTypeConfigRepository;
     private final AcademicCalendarEventRepository academicCalendarEventRepository;
     private final StaffRepository staffRepository;
+    private final DashboardEventService dashboardEventService;
     private final AuthUtil authUtil;
 
     @Override
@@ -140,7 +143,18 @@ public class LeaveManagementServiceImpl implements LeaveManagementService {
         application.setStatus(LeaveApplicationStatus.PENDING);
         application.setAppliedOn(LocalDateTime.now());
 
-        return toApplicationResponse(leaveApplicationRepository.save(application));
+        LeaveApplication savedApp = leaveApplicationRepository.save(application);
+
+        DashboardEvent event = DashboardEvent.builder()
+                .type("hrms")
+                .severity("info")
+                .title("New Leave Request")
+                .message(currentStaff.getUserProfile().getFirstName() + " requested " + totalDays + " days of " + leaveType.getDisplayName())
+                .metadata(java.util.Map.of("staffId", currentStaff.getId(), "leaveId", savedApp.getId(), "totalDays", totalDays))
+                .build();
+        dashboardEventService.pushEvent(event);
+
+        return toApplicationResponse(savedApp);
     }
 
     @Override

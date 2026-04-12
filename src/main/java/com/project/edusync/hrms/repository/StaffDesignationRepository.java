@@ -23,6 +23,8 @@ public interface StaffDesignationRepository extends JpaRepository<StaffDesignati
 
     boolean existsByDesignationCodeIgnoreCaseAndActiveTrueAndIdNot(String designationCode, Long id);
 
+    Optional<StaffDesignation> findByDesignationNameIgnoreCase(String designationName);
+
     Optional<StaffDesignation> findByUuid(java.util.UUID uuid);
 }
 

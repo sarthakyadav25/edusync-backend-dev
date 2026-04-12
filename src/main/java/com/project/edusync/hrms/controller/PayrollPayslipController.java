@@ -1,6 +1,7 @@
 package com.project.edusync.hrms.controller;
 
 import com.project.edusync.hrms.dto.payroll.PayslipDetailDTO;
+import com.project.edusync.hrms.dto.payroll.PayrollPreflightDTO;
 import com.project.edusync.hrms.dto.payroll.StaffAttendanceSummaryDTO;
 import com.project.edusync.hrms.dto.payroll.PayslipSummaryDTO;
 import com.project.edusync.hrms.service.PayrollService;
@@ -96,6 +97,16 @@ public class PayrollPayslipController {
         int y = year == null ? LocalDate.now().getYear() : year;
         int m = month == null ? LocalDate.now().getMonthValue() : month;
         return ResponseEntity.ok(payrollService.getMyAttendanceSummary(y, m));
+    }
+
+    @GetMapping("/preflight")
+    @Operation(summary = "Payroll preflight validation")
+    @PreAuthorize("hasAnyAuthority('ROLE_SUPER_ADMIN','ROLE_SCHOOL_ADMIN','ROLE_ADMIN')")
+    public ResponseEntity<PayrollPreflightDTO> preflight(
+            @RequestParam Integer year,
+            @RequestParam Integer month
+    ) {
+        return ResponseEntity.ok(payrollService.getPayrollPreflight(year, month));
     }
 }
 

@@ -1,6 +1,7 @@
 package com.project.edusync.ams.model.controller;
 
 import com.project.edusync.ams.model.dto.request.StudentAttendanceRequestDTO;
+import com.project.edusync.ams.model.dto.response.StudentAttendanceCompletionDTO;
 import com.project.edusync.ams.model.dto.response.StudentAttendanceResponseDTO;
 import com.project.edusync.ams.model.exception.AttendanceProcessingException;
 import com.project.edusync.ams.model.service.StudentAttendanceService;
@@ -18,6 +19,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
+import java.time.LocalDate;
 
 /**
  * Controller for Student Attendance endpoints using attendance short code.
@@ -90,6 +92,23 @@ public class StudentAttendanceController {
                 Optional.ofNullable(fromDate),
                 Optional.ofNullable(toDate),
                 Optional.ofNullable(attendanceTypeShortCode));
+        return ResponseEntity.ok(resp);
+    }
+
+    @GetMapping("/completion")
+    @Operation(summary = "Get student attendance completion by class/section and date range")
+    public ResponseEntity<StudentAttendanceCompletionDTO> completion(
+            @RequestParam("classUuid") UUID classUuid,
+            @RequestParam(value = "sectionUuid", required = false) UUID sectionUuid,
+            @RequestParam("fromDate") String fromDate,
+            @RequestParam("toDate") String toDate
+    ) {
+        StudentAttendanceCompletionDTO resp = service.getAttendanceCompletion(
+                classUuid,
+                sectionUuid,
+                LocalDate.parse(fromDate),
+                LocalDate.parse(toDate)
+        );
         return ResponseEntity.ok(resp);
     }
 

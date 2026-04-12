@@ -1,6 +1,7 @@
 package com.project.edusync.ams.model.service;
 
 import com.project.edusync.ams.model.dto.request.StudentAttendanceRequestDTO;
+import com.project.edusync.ams.model.dto.response.StudentAttendanceCompletionDTO;
 import com.project.edusync.ams.model.dto.response.StudentAttendanceResponseDTO;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -8,6 +9,7 @@ import org.springframework.data.domain.Pageable;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.time.LocalDate;
 
 public interface StudentAttendanceService {
 
@@ -34,4 +36,6 @@ public interface StudentAttendanceService {
     );
 
     void deleteAttendance(UUID recordUuid, Long performedByStaffId);
+
+    StudentAttendanceCompletionDTO getAttendanceCompletion(UUID classUuid, UUID sectionUuid, LocalDate fromDate, LocalDate toDate);
 }
