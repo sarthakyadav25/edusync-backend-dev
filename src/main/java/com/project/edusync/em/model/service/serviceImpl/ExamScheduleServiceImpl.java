@@ -65,15 +65,6 @@ public class ExamScheduleServiceImpl implements ExamScheduleService {
         Exam exam = examRepository.findByUuid(examUuid)
                 .orElseThrow(() -> new ExamNotFoundException(examUuid));
 
-        // First schedule binds the exam-level template; subsequent schedules must use the same template.
-        if (exam.getTemplate() == null) {
-            ExamTemplate selectedTemplate = examTemplateRepository.findByUuid(requestDTO.getTemplateId())
-                    .orElseThrow(() -> new EdusyncException("EM-404", "Exam template not found", HttpStatus.NOT_FOUND));
-            exam.setTemplate(selectedTemplate);
-        } else if (!exam.getTemplate().getUuid().equals(requestDTO.getTemplateId())) {
-            throw new EdusyncException("EM-400", "templateId must match the selected exam template", HttpStatus.BAD_REQUEST);
-        }
-
         validateRequest(requestDTO);
 
         ExamSchedule schedule = new ExamSchedule();
@@ -92,13 +83,6 @@ public class ExamScheduleServiceImpl implements ExamScheduleService {
         ExamSchedule schedule = examScheduleRepository.findById(scheduleId)
                 .orElseThrow(() -> new EdusyncException("EM-404", "Exam Schedule not found", HttpStatus.NOT_FOUND));
 
-        if (schedule.getExam().getTemplate() == null) {
-            ExamTemplate selectedTemplate = examTemplateRepository.findByUuid(requestDTO.getTemplateId())
-                    .orElseThrow(() -> new EdusyncException("EM-404", "Exam template not found", HttpStatus.NOT_FOUND));
-            schedule.getExam().setTemplate(selectedTemplate);
-        } else if (!schedule.getExam().getTemplate().getUuid().equals(requestDTO.getTemplateId())) {
-            throw new EdusyncException("EM-400", "templateId must match the selected exam template", HttpStatus.BAD_REQUEST);
-        }
 
         validateRequest(requestDTO);
         mapDtoToEntity(requestDTO, schedule);
