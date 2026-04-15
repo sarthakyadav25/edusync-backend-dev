@@ -1,0 +1,14 @@
+package com.project.edusync.em.model.enums;
+
+public enum EvaluationAuditEventType {
+    ASSIGNMENT_UPSERTED,
+    ANSWER_SHEET_UPLOADED,
+    ANSWER_SHEET_UPLOAD_COMPLETED,
+    DRAFT_MARKS_SAVED,
+    MARKS_SUBMITTED,
+    MARKS_APPROVED,
+    MARKS_REJECTED,
+    MARKS_PUBLISHED,
+    ANNOTATION_CREATED
+}
+

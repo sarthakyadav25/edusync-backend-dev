@@ -6,6 +6,7 @@ import com.project.edusync.finance.model.entity.Payment;
 import com.project.edusync.uis.model.entity.Student;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
@@ -49,4 +50,13 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
             "FROM Payment p " +
             "WHERE p.status = 'SUCCESS'")
     BigDecimal findTotalCollected();
+
+    @Query("""
+            SELECT COALESCE(SUM(p.amountPaid), 0)
+            FROM Payment p
+            WHERE p.status = 'SUCCESS'
+              AND YEAR(p.paymentDate) = :year
+              AND MONTH(p.paymentDate) = :month
+            """)
+    BigDecimal sumCollectedByYearMonth(@Param("year") int year, @Param("month") int month);
 }

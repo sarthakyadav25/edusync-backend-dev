@@ -13,7 +13,16 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-      timeout: 500ms
+      timeout: ${REDIS_TIMEOUT:2s}
+      repositories:
+        enabled: false
+      lettuce:
+        pool:
+          enabled: true
+          max-active: ${REDIS_POOL_MAX_ACTIVE:16}
+          max-idle: ${REDIS_POOL_MAX_IDLE:16}
+          min-idle: ${REDIS_POOL_MIN_IDLE:2}
+          max-wait: ${REDIS_POOL_MAX_WAIT:1s}
   profiles:
     active: dev
   mail:
@@ -42,18 +51,25 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          batch_size: ${HIBERNATE_BATCH_SIZE:50}
+        order_inserts: true
+        order_updates: true
   flyway:
     enabled: true
     locations: classpath:db/migration
     # Keep baseline opt-in by default for safety in existing environments.
     baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:false}
 
+  servlet:
+    multipart:
+      max-file-size: ${MAX_UPLOAD_FILE_SIZE:10MB}
+      max-request-size: ${MAX_UPLOAD_REQUEST_SIZE:12MB}
+
 # ===================================================================
 # APPLICATION-SPECIFIC PROPERTIES
 # ===================================================================
 app:
-  cache:
-    version: ${APP_CACHE_VERSION:v1}
   razorpay:
     key-id: ${RAZORPAY_KEY_ID}
     key-secret: ${RAZORPAY_KEY_SECRET}
@@ -90,6 +106,23 @@ app:
       folder: ${CLOUDINARY_UPLOAD_FOLDER:profiles}
     s3:
       upload-url-template: ${S3_UPLOAD_URL_TEMPLATE:}
+
+  notifications:
+    sns:
+      enabled: ${SNS_ENABLED:false}
+
+  bootstrap:
+    super-admin:
+      fail-on-missing-credentials: ${SUPER_ADMIN_BOOTSTRAP_REQUIRED:false}
+
+  evaluation:
+    storage:
+      private-dir: ${EVALUATION_PRIVATE_STORAGE_DIR:uploads-private/answer-sheets}
+    upload:
+      max-per-minute: ${EVALUATION_UPLOAD_MAX_PER_MINUTE:20}
+    file-signing-secret: ${EVALUATION_FILE_SIGNING_SECRET:${app.jwt.secret-key}}
+    draft:
+      ttl-minutes: ${EVALUATION_DRAFT_TTL_MINUTES:30}
 
 # NOTE: 'api.url' is kept at the root namespace as it is referenced
 # directly via @RequestMapping("${api.url}/...") across all controllers.
@@ -171,8 +204,11 @@ spring:
     # Enabled only in dev for debugging SQL queries.
     show-sql: true
   flyway:
+    enabled: false
     # Dev can bootstrap on existing local schemas without manual baseline steps.
     baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:true}
+    # Allow newly added older-version migrations in local dev after branch merges/renames.
+    out-of-order: ${FLYWAY_OUT_OF_ORDER:true}
 
 ---
 # ===================================================================
@@ -219,6 +255,11 @@ spring:
   flyway:
     # Production baseline remains explicit and controlled via env var.
     baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:false}
+
+app:
+  bootstrap:
+    super-admin:
+      fail-on-missing-credentials: ${SUPER_ADMIN_BOOTSTRAP_REQUIRED:true}
 
 # SECURITY: Enforce HTTPS in production.
 server:

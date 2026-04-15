@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -103,10 +104,16 @@ public class WebSecurityConfig {
                         // 5. Framework/error paths that should stay public
                         .requestMatchers(apiVersionPath + "/error", "/error", "/favicon.ico").permitAll()
 
-                        // 6. Teacher dashboard APIs
+                        // 6. Signed answer-sheet download (auth is via HMAC token + expiry)
+                        .requestMatchers(HttpMethod.GET, apiVersionPath + "/teacher/answer-sheets/*/file").permitAll()
+
+                        // 7. Teacher dashboard APIs
                         .requestMatchers(apiVersionPath + "/teacher/**").hasAnyRole("TEACHER", "ADMIN", "SUPER_ADMIN")
 
-                        // 7. Default: all remaining endpoints require authentication
+                        // 8. Student APIs
+                        .requestMatchers(apiVersionPath + "/student/**").hasAnyRole("STUDENT", "ADMIN", "SUPER_ADMIN")
+
+                        // 9. Default: all remaining endpoints require authentication
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(customAuthenticationEntryPoint))

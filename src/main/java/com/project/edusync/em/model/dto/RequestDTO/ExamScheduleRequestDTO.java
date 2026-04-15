@@ -23,6 +23,9 @@ import java.util.UUID;
 @AllArgsConstructor
 public class ExamScheduleRequestDTO {
 
+    @NotNull(message = "Template UUID is required")
+    private UUID templateId;
+
     @NotNull(message = "Duration (minutes) is required")
     private Integer duration;
     @NotNull(message = "Class UUID is required")
@@ -53,5 +56,10 @@ public class ExamScheduleRequestDTO {
     @Size(max = 50, message = "Room number must be under 50 characters")
     private String roomNumber;
 
+    /** 1=single, 2=double (L/R), 3=triple (L/M/R) */
+    private Integer maxStudentsPerSeat;
+
     public Integer getDuration() { return duration; }
+    public Integer getMaxStudentsPerSeat() { return maxStudentsPerSeat; }
+    public void setMaxStudentsPerSeat(Integer maxStudentsPerSeat) { this.maxStudentsPerSeat = maxStudentsPerSeat; }
 }

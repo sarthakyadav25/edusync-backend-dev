@@ -1,0 +1,22 @@
+package com.project.edusync.em.model.dto.ResponseDTO;
+
+import lombok.Builder;
+import lombok.Data;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
+@Data
+@Builder
+public class EvaluationResultResponseDTO {
+    private Long resultId;
+    private Long answerSheetId;
+    private BigDecimal totalMarks;
+    private String status;
+    private LocalDateTime evaluatedAt;
+    private LocalDateTime submittedAt;
+    private LocalDateTime approvedAt;
+    private LocalDateTime publishedAt;
+    private String approvedBy;
+}
+

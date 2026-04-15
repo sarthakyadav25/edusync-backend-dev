@@ -22,11 +22,6 @@ public class StaffAttendanceRequestDTO {
     @Schema(description = "Staff public UUID (preferred)", format = "uuid")
     UUID staffUuid;
 
-    /** Logical FK to UIS.Staff.id (deprecated). */
-    @Deprecated
-    @Schema(description = "Deprecated legacy staff id. Use staffUuid.", deprecated = true)
-    Long staffId;
-
     @jakarta.validation.constraints.NotNull(message = "Attendance date is required")
     @PastOrPresent(message = "Attendance date cannot be in the future")
     LocalDate attendanceDate;
@@ -49,8 +44,14 @@ public class StaffAttendanceRequestDTO {
     @Size(max = 500, message = "Notes cannot exceed 500 characters")
     String notes;
 
-    @AssertTrue(message = "Either staffUuid or deprecated staffId must be provided")
+    @Schema(description = "Latitude captured at check-in")
+    Double latitude;
+
+    @Schema(description = "Longitude captured at check-in")
+    Double longitude;
+
+    @AssertTrue(message = "staffUuid must be provided")
     private boolean hasStaffIdentifier() {
-        return staffUuid != null || staffId != null;
+        return staffUuid != null;
     }
 }

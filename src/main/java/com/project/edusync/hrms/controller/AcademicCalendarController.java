@@ -36,7 +36,6 @@ public class AcademicCalendarController {
 
     @GetMapping("/events")
     @Operation(summary = "List calendar events", description = "Returns all active calendar events, optionally filtered by academicYear and month")
-    @PreAuthorize("hasAnyAuthority('ROLE_SUPER_ADMIN','ROLE_SCHOOL_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<List<CalendarEventResponseDTO>> listEvents(
             @RequestParam(required = false) String academicYear,
             @RequestParam(required = false) Integer month

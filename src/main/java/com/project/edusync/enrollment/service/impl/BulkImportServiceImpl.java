@@ -22,6 +22,7 @@ import com.project.edusync.enrollment.service.BulkImportService;
 import com.project.edusync.enrollment.service.SseEmitterRegistry;
 import com.project.edusync.enrollment.util.CsvValidationHelper;
 import com.project.edusync.enrollment.util.RegisterUserByRole;
+import com.project.edusync.em.model.service.SeatAllocationService;
 import com.project.edusync.iam.model.entity.Role;
 import com.project.edusync.iam.model.entity.User;
 import com.project.edusync.iam.repository.RoleRepository;
@@ -97,16 +98,16 @@ public class BulkImportServiceImpl implements BulkImportService {
     // Common staff fields + all *possible* specific fields
     // This provides a single, verifiable header for the "staff.csv"
     private static final List<String> STAFF_HEADER = Arrays.asList(
-            // Common Staff (0-10)
+            // Common Staff (0-11)
             "firstName", "lastName", "middleName", "email", "dateOfBirth",
-            "gender", "employeeId", "joiningDate", "jobTitle", "department", "staffType",
-            // Teacher (11-15)
+            "gender", "employeeId", "joiningDate", "jobTitle", "department", "staffType", "staffCategory",
+            // Teacher (12-16)
             "certifications", "specializations", "yearsOfExperience", "educationLevel", "stateLicenseNumber",
-            // Principal (16-17)
+            // Principal (17-18)
             "administrativeCertifications", "schoolLevelManaged",
-            // Librarian (18-19)
+            // Librarian (19-20)
             "librarySystemPermissions", "mlisDegree",
-            // Security (20-21)
+            // Security (21-22)
             "assignedGate", "shiftTiming");
 
     private static final List<String> GUARDIAN_HEADER = Arrays.asList(
@@ -142,6 +143,7 @@ public class BulkImportServiceImpl implements BulkImportService {
     private final RegisterUserByRole registerUserByRole;
     private final SseEmitterRegistry sseEmitterRegistry;
     private final ObjectMapper objectMapper;
+    private final SeatAllocationService seatAllocationService;
 
     /**
      * Emits a progress event to the SSE emitter for the given session.
@@ -747,6 +749,7 @@ public class BulkImportServiceImpl implements BulkImportService {
         room.setIsActive(true);
 
         Room saved = roomRepository.save(room);
+        seatAllocationService.generateSeatsForRoom(saved);
         return saved.getTotalCapacity();
     }
 
@@ -1099,14 +1102,15 @@ public class BulkImportServiceImpl implements BulkImportService {
         LocalDate joiningDate = validationHelper.parseDate(row[7], "joiningDate");
         String jobTitle = validationHelper.validateString(row[8], "jobTitle");
         Department department = validationHelper.parseEnum(Department.class, row[9], "department");
+        StaffCategory staffCategory = validationHelper.parseEnum(StaffCategory.class, row[11], "staffCategory");
 
-        // 2. --- Parse Teacher-Specific Fields (Indices 11-15) ---
-        String certifications = row[11]; // Assuming JSON string or CSV
-        String specializations = row[12]; // Assuming JSON string or CSV
-        Integer yearsOfExperience = validationHelper.parseInt(row[13], "yearsOfExperience");
+        // 2. --- Parse Teacher-Specific Fields (Indices 12-16) ---
+        String certifications = row[12]; // Assuming JSON string or CSV
+        String specializations = row[13]; // Assuming JSON string or CSV
+        Integer yearsOfExperience = validationHelper.parseInt(row[14], "yearsOfExperience");
         EducationLevel educationLevel = validationHelper.parseEnum(
-                EducationLevel.class, row[14], "educationLevel");
-        String stateLicenseNumber = row[15];
+                EducationLevel.class, row[15], "educationLevel");
+        String stateLicenseNumber = row[16];
 
         // 3. --- Validate Business Logic ---
         if (userRepository.existsByEmail(email)) {
@@ -1124,7 +1128,7 @@ public class BulkImportServiceImpl implements BulkImportService {
         // 4. --- Delegate creation to the (refactored) helper ---
         registerUserByRole.RegisterStaff(email, employeeId, DEFAULT_PASSWORD, staffRole,
                 firstName, lastName, middleName, dob, gender, joiningDate, jobTitle,
-                department, StaffType.TEACHER, row);
+                department, StaffType.TEACHER, staffCategory, row);
     }
 
     /**
@@ -1142,11 +1146,12 @@ public class BulkImportServiceImpl implements BulkImportService {
         LocalDate joiningDate = validationHelper.parseDate(row[7], "joiningDate");
         String jobTitle = validationHelper.validateString(row[8], "jobTitle");
         Department department = validationHelper.parseEnum(Department.class, row[9], "department");
+        StaffCategory staffCategory = validationHelper.parseEnum(StaffCategory.class, row[11], "staffCategory");
 
-        // 2. --- Parse Principal-Specific Fields (Indices 16-17) ---
-        String adminCertifications = row[16]; // Assuming JSON string or CSV
+        // 2. --- Parse Principal-Specific Fields (Indices 17-18) ---
+        String adminCertifications = row[17]; // Assuming JSON string or CSV
         SchoolLevel schoolLevel = validationHelper.parseEnum(
-                SchoolLevel.class, row[17], "schoolLevelManaged");
+                SchoolLevel.class, row[18], "schoolLevelManaged");
 
         // 3. --- Validate Business Logic ---
         if (userRepository.existsByEmail(email)) {
@@ -1164,7 +1169,7 @@ public class BulkImportServiceImpl implements BulkImportService {
         // 4. --- Delegate creation to the (refactored) helper ---
         registerUserByRole.RegisterStaff(email, employeeId, DEFAULT_PASSWORD, staffRole,
                 firstName, lastName, middleName, dob, gender, joiningDate, jobTitle,
-                department, StaffType.PRINCIPAL, row);
+                department, StaffType.PRINCIPAL, staffCategory, row);
     }
 
     /**
@@ -1182,6 +1187,7 @@ public class BulkImportServiceImpl implements BulkImportService {
         LocalDate joiningDate = validationHelper.parseDate(row[7], "joiningDate");
         String jobTitle = validationHelper.validateString(row[8], "jobTitle");
         Department department = validationHelper.parseEnum(Department.class, row[9], "department");
+        StaffCategory staffCategory = validationHelper.parseEnum(StaffCategory.class, row[11], "staffCategory");
 
         // 3. --- Validate Business Logic ---
         if (userRepository.existsByEmail(email)) {
@@ -1199,6 +1205,6 @@ public class BulkImportServiceImpl implements BulkImportService {
         // 4. --- Delegate creation to the (refactored) helper ---
         registerUserByRole.RegisterStaff(email, employeeId, DEFAULT_PASSWORD, staffRole,
                 firstName, lastName, middleName, dob, gender, joiningDate, jobTitle,
-                department, StaffType.LIBRARIAN, row);
+                department, StaffType.LIBRARIAN, staffCategory, row);
     }
 }

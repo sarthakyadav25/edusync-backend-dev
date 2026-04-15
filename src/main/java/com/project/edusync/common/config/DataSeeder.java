@@ -219,7 +219,12 @@ public class DataSeeder implements ApplicationRunner {
                 "marks:read:section",
                 "marks:update:section",
                 "timetable:read:own",
-                "student:read:section"
+                "student:read:section",
+                "evaluation:assignment:read:own",
+                "evaluation:answer-sheet:upload",
+                "evaluation:marks:draft",
+                "evaluation:marks:publish",
+                "evaluation:annotation:write"
         ));
 
         blueprint.put("ROLE_LIBRARIAN", List.of(
@@ -265,7 +270,10 @@ public class DataSeeder implements ApplicationRunner {
                 "rbac:role-permission:revoke",
                 "rbac:role-permission:read",
                 "visitor:manage",
-                "visitor:read:all"
+                "visitor:read:all",
+                "evaluation:assignment:manage",
+                "evaluation:assignment:read:all",
+                "evaluation:answer-sheet:read:all"
         ));
 
         blueprint.put("ROLE_ADMIN", List.of(
@@ -285,7 +293,10 @@ public class DataSeeder implements ApplicationRunner {
                 "rbac:role-permission:revoke",
                 "rbac:role-permission:read",
                 "visitor:manage",
-                "visitor:read:all"
+                "visitor:read:all",
+                "evaluation:assignment:manage",
+                "evaluation:assignment:read:all",
+                "evaluation:answer-sheet:read:all"
         ));
 
         blueprint.put("ROLE_SUPER_ADMIN", List.of(
@@ -313,15 +324,15 @@ public class DataSeeder implements ApplicationRunner {
         ));
 
         blueprint.put("ROLE_SECURITY_GUARD", List.of(
-                "profile:read:own",
                 "dashboard:read:security",
-                "visitor:manage"
+                "visitor:manage",
+                "evaluation:assignment:manage",
+                "evaluation:assignment:read:all",
+                "evaluation:answer-sheet:read:all"
         ));
-
         return blueprint;
     }
 
-    private void seedClassesAndSections() {
         // No .count() check needed.
         log.info("Seeding foundational Academic Classes and Sections...");
 
@@ -423,7 +434,17 @@ public class DataSeeder implements ApplicationRunner {
                 seed("feature.timetable_ai", "true", SettingType.BOOLEAN, SettingGroup.FEATURES, "Enable AI timetable module", false, false),
                 seed("feature.bulk_import", "true", SettingType.BOOLEAN, SettingGroup.FEATURES, "Enable bulk import module", false, false),
                 seed("feature.parent_portal", "false", SettingType.BOOLEAN, SettingGroup.FEATURES, "Enable parent portal", false, false),
-                seed("feature.sms_notifications", "false", SettingType.BOOLEAN, SettingGroup.FEATURES, "Enable SMS notifications", false, false)
+                seed("feature.sms_notifications", "false", SettingType.BOOLEAN, SettingGroup.FEATURES, "Enable SMS notifications", false, false),
+                // Attendance controls
+                // Stored under FEATURES to remain compatible with existing DB check constraint.
+                // AppSettingService remaps attendance.* keys to ATTENDANCE group in responses.
+                seed("attendance.edit.window.enabled", "true", SettingType.BOOLEAN, SettingGroup.FEATURES, "Enable/disable edit window enforcement", false, false),
+                seed("attendance.edit.window.teacher.hours", "48", SettingType.INTEGER, SettingGroup.FEATURES, "Hours within which teachers can edit attendance", false, false),
+                seed("attendance.edit.window.school_admin.hours", "0", SettingType.INTEGER, SettingGroup.FEATURES, "Hours within which school admins can edit attendance. 0 = unlimited", false, false),
+                seed("attendance.geofence.enabled", "true", SettingType.BOOLEAN, SettingGroup.FEATURES, "Enable geo-fence validation for staff self check-in", false, false),
+                seed("attendance.geofence.latitude", "", SettingType.STRING, SettingGroup.FEATURES, "School latitude coordinate (decimal degrees)", false, false),
+                seed("attendance.geofence.longitude", "", SettingType.STRING, SettingGroup.FEATURES, "School longitude coordinate (decimal degrees)", false, false),
+                seed("attendance.geofence.radius.meters", "200", SettingType.INTEGER, SettingGroup.FEATURES, "Maximum distance in meters from school for valid check-in", false, false)
         );
 
         int inserted = 0;
@@ -460,11 +481,20 @@ public class DataSeeder implements ApplicationRunner {
 
         String username = environment.getProperty("SUPER_ADMIN_USERNAME");
         String rawPassword = environment.getProperty("SUPER_ADMIN_PASSWORD");
+        boolean failOnMissingCredentials = environment.getProperty(
+                "app.bootstrap.super-admin.fail-on-missing-credentials",
+                Boolean.class,
+                false
+        );
 
         if (username == null || username.isBlank() || rawPassword == null || rawPassword.isBlank()) {
-            throw new IllegalStateException(
-                    "SUPER_ADMIN bootstrap requires SUPER_ADMIN_USERNAME and SUPER_ADMIN_PASSWORD on first deployment."
-            );
+            if (failOnMissingCredentials) {
+                throw new IllegalStateException(
+                        "SUPER_ADMIN bootstrap requires SUPER_ADMIN_USERNAME and SUPER_ADMIN_PASSWORD on first deployment."
+                );
+            }
+            log.warn("SUPER_ADMIN bootstrap skipped: SUPER_ADMIN_USERNAME/SUPER_ADMIN_PASSWORD not provided and strict mode is disabled.");
+            return;
         }
 
         Role superAdminRole = rolesByName.get("ROLE_SUPER_ADMIN");
@@ -508,3 +538,4 @@ public class DataSeeder implements ApplicationRunner {
                                boolean sensitive) {
     }
 }
+

@@ -90,14 +90,26 @@ public class ExamServiceImpl implements ExamService {
      * Marks an exam as "published".
      */
     @Override
-    public ExamResponseDTO publishExam(UUID uuid) {
+    public ExamResponseDTO publishExam(UUID uuid, Boolean published) {
         Exam exam = findExamByUuid(uuid);
-
-        // Business logic
-        exam.setPublished(true);
-
+        if (published != null) {
+            exam.setPublished(published);
+        }
         Exam publishedExam = examRepository.save(exam);
         return examMapper.toResponseDTO(publishedExam);
+    }
+
+    /**
+     * Publishes the timetable to students' dashboards.
+     */
+    @Override
+    public ExamResponseDTO publishTimetable(UUID uuid) {
+        Exam exam = findExamByUuid(uuid);
+        exam.setTimetablePublished(true);
+        // Also ensure the exam itself is published
+        exam.setPublished(true);
+        Exam saved = examRepository.save(exam);
+        return examMapper.toResponseDTO(saved);
     }
 
     /**
@@ -117,6 +129,18 @@ public class ExamServiceImpl implements ExamService {
         }
 
         examRepository.delete(exam);
+    }
+
+    /**
+     * Retrieves a list of upcoming exams (only published).
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<ExamResponseDTO> getUpcomingExams() {
+        return examRepository.findAll().stream()
+                .filter(e -> Boolean.TRUE.equals(e.getPublished()))
+                .map(examMapper::toResponseDTO)
+                .collect(Collectors.toList());
     }
 
     // --- Helper Method ---

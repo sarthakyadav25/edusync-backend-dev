@@ -4,6 +4,7 @@ import com.project.edusync.ams.model.entity.StudentDailyAttendance;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -14,7 +15,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Repository
-public interface StudentDailyAttendanceRepository extends JpaRepository<StudentDailyAttendance, Long> {
+public interface StudentDailyAttendanceRepository extends JpaRepository<StudentDailyAttendance, Long>, JpaSpecificationExecutor<StudentDailyAttendance> {
 
     Optional<StudentDailyAttendance> findByUuid(UUID uuid);
 
@@ -61,6 +62,18 @@ public interface StudentDailyAttendanceRepository extends JpaRepository<StudentD
             @Param("studentIds") List<Long> studentIds,
             @Param("attendanceDate") LocalDate attendanceDate);
 
+    @Query("""
+            SELECT DISTINCT sda.attendanceDate FROM StudentDailyAttendance sda
+            WHERE sda.studentId IN :studentIds
+              AND sda.attendanceDate BETWEEN :fromDate AND :toDate
+            ORDER BY sda.attendanceDate ASC
+            """)
+    List<LocalDate> findDistinctDatesWithRecords(
+            @Param("studentIds") List<Long> studentIds,
+            @Param("fromDate") LocalDate fromDate,
+            @Param("toDate") LocalDate toDate
+    );
+
     /**
      * Counts the number of attendance records for a student.
      * @param studentId The logical ID of the student (UIS FK).
@@ -105,4 +118,12 @@ public interface StudentDailyAttendanceRepository extends JpaRepository<StudentD
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate
     );
+
+    @Query("""
+            SELECT COUNT(DISTINCT sda.studentId)
+            FROM StudentDailyAttendance sda
+            WHERE sda.attendanceDate = :date
+              AND sda.attendanceType.isPresentMark = true
+            """)
+    long countDistinctPresentStudentsByDate(@Param("date") LocalDate date);
 }

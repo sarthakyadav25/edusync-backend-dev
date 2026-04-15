@@ -34,6 +34,7 @@ public class AppSettingServiceImpl implements AppSettingService {
 
     private static final String MASKED_SECRET = "********";
     private static final String PUBLIC_CACHE_KEY = "public-whitelabel";
+    private static final String VALUE_CACHE_PREFIX = "value:";
 
     private final AppSettingRepository appSettingRepository;
     private final AppSettingCryptoService appSettingCryptoService;
@@ -41,16 +42,33 @@ public class AppSettingServiceImpl implements AppSettingService {
     private final Cache<String, PublicWhitelabelSettingsResponseDto> publicWhitelabelCache =
             Caffeine.newBuilder().expireAfterWrite(Duration.ofSeconds(30)).build();
 
+    private final Cache<String, String> valueCache =
+            Caffeine.newBuilder().expireAfterWrite(Duration.ofMinutes(2)).maximumSize(1000).build();
+
     @Override
     @Transactional(readOnly = true)
     public Map<String, List<AppSettingResponseDto>> getSettings(SettingGroup group) {
-        List<AppSetting> settings = group == null
-                ? appSettingRepository.findAllByOrderBySettingGroupAscKeyAsc()
-                : appSettingRepository.findAllBySettingGroupOrderByKeyAsc(group);
+        List<AppSetting> settings;
+        boolean attendanceCompatView = group == SettingGroup.ATTENDANCE;
+        if (group == null) {
+            settings = appSettingRepository.findAllByOrderBySettingGroupAscKeyAsc();
+        } else if (attendanceCompatView) {
+            // Backward-compatible read path when DB constraint does not yet allow ATTENDANCE enum values.
+            settings = appSettingRepository.findByKeyStartingWithOrderByKeyAsc("attendance.");
+        } else {
+            settings = appSettingRepository.findAllBySettingGroupOrderByKeyAsc(group);
+        }
 
         Map<String, List<AppSettingResponseDto>> grouped = new LinkedHashMap<>();
         for (AppSetting setting : settings) {
-            String groupName = setting.getSettingGroup().name();
+            // Always remap attendance.* keys to the virtual ATTENDANCE group,
+            // regardless of their stored DB group (currently FEATURES).
+            String groupName;
+            if (setting.getKey().startsWith("attendance.")) {
+                groupName = SettingGroup.ATTENDANCE.name();
+            } else {
+                groupName = setting.getSettingGroup().name();
+            }
             grouped.computeIfAbsent(groupName, ignored -> new ArrayList<>()).add(toResponse(setting));
         }
         return grouped;
@@ -144,11 +162,19 @@ public class AppSettingServiceImpl implements AppSettingService {
     @Override
     @Transactional(readOnly = true)
     public String getValue(String key, String defaultValue) {
-        return appSettingRepository.findById(key)
+        String cacheKey = VALUE_CACHE_PREFIX + key + "::" + defaultValue;
+        String cached = valueCache.getIfPresent(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+
+        String value = appSettingRepository.findById(key)
                 .map(setting -> setting.getType() == SettingType.ENCRYPTED
                         ? appSettingCryptoService.decryptFromStorage(setting.getValue())
                         : setting.getValue())
                 .orElse(defaultValue);
+        valueCache.put(cacheKey, value);
+        return value;
     }
 
     @Override
@@ -226,6 +252,7 @@ public class AppSettingServiceImpl implements AppSettingService {
     }
 
     private void invalidatePublicCachesIfNeeded(List<AppSettingRequestDto> requestDtos) {
+        valueCache.invalidateAll();
         boolean touchedPublic = requestDtos.stream().anyMatch(request ->
                 request.key().startsWith("feature.") || request.key().startsWith("school."));
         if (touchedPublic) {

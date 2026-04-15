@@ -12,19 +12,12 @@ import java.time.LocalTime;
 @AllArgsConstructor
 public class StaffAttendanceResponseDTO {
 
-    @Deprecated
-    @Schema(description = "Deprecated internal attendance id", deprecated = true)
-    private Long staffAttendanceId;
-
     @Schema(description = "Staff attendance UUID", format = "uuid")
     private String uuid;
 
     @Schema(description = "Staff UUID", format = "uuid")
     private String staffUuid;
 
-    @Deprecated
-    @Schema(description = "Deprecated internal staff id", deprecated = true)
-    private Long staffId;
     private String staffName;
     private String jobTitle;
 
@@ -38,6 +31,16 @@ public class StaffAttendanceResponseDTO {
     private LocalTime timeOut;
     private Double totalHours;
 
+    private LocalTime shiftStartTime;
+    private LocalTime shiftEndTime;
+    private Integer shiftGraceMinutes;
+
     private AttendanceSource source;
     private String notes;
+
+    private Double latitude;
+    private Double longitude;
+    private Boolean geoVerified;
+    private Boolean earlyLeave;
+    private Integer earlyOutMinutes;
 }
