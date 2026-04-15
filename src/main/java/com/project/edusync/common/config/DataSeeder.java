@@ -333,6 +333,7 @@ public class DataSeeder implements ApplicationRunner {
         return blueprint;
     }
 
+    private void seedClassesAndSections() {
         // No .count() check needed.
         log.info("Seeding foundational Academic Classes and Sections...");
 
